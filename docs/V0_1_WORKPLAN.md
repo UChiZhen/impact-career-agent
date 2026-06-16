@@ -98,6 +98,15 @@ Make `career-agent demo` read fictional sample data and print:
 
 No external API calls.
 
+Status: done.
+
+Implemented:
+
+- sample-data loading
+- deterministic local job scoring
+- digest preview rendering
+- CLI command: `python -m career_agent.cli.main demo`
+
 ### Step 4: LLM provider interface
 
 Add provider protocol and adapters:

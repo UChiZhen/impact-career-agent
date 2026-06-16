@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from career_agent import __version__
+from career_agent.demo import DEFAULT_CONFIG_PATH, run_demo
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -15,7 +17,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("version", help="Print the package version.")
-    subparsers.add_parser("demo", help="Run the credential-free demo workflow.")
+    demo_parser = subparsers.add_parser("demo", help="Run the credential-free demo workflow.")
+    demo_parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to a demo YAML config file.",
+    )
     return parser
 
 
@@ -29,8 +36,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "demo":
-        print("Impact Career Agent demo")
-        print("v0.1 demo data and workflow will be added in the next step.")
+        print(run_demo(Path(args.config)))
         return 0
 
     parser.error(f"unknown command: {args.command}")

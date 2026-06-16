@@ -53,6 +53,15 @@ career-agent score --input examples/sample_data/jobs.json
 career-agent tailor --job examples/sample_data/job_posting.md
 ```
 
+The current demo is credential-free:
+
+```bash
+python -m career_agent.cli.main demo
+```
+
+It uses fictional sample data and deterministic local scoring. It does not call
+OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
+
 ## Privacy
 
 The project is designed around local-first operation. Credentials, OAuth tokens,
@@ -64,8 +73,8 @@ must stay out of git. See [SECURITY.md](SECURITY.md) for details.
 This repository is pre-v0.1. The current work is migration and hardening:
 
 - [x] Create open-source project skeleton.
-- [ ] Define core data models.
-- [ ] Add demo data and runnable CLI.
+- [x] Define core data models.
+- [x] Add demo data and runnable CLI.
 - [ ] Port job discovery and scoring modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
