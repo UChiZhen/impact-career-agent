@@ -1,0 +1,28 @@
+personal:
+  name: Jane Doe
+  location: Chicago, IL
+background:
+  degree: Master of Public Policy
+  school: Example University
+  graduation_date: "2026-06"
+  skills:
+    - Python
+    - SQL
+    - impact measurement
+    - financial analysis
+preferences:
+  target_geography:
+    - United States
+    - United Kingdom
+  target_org_types:
+    - impact fund
+    - foundation
+    - development finance institution
+  preferred_levels:
+    - analyst
+    - associate
+    - fellow
+  excluded_keywords:
+    - senior
+    - director
+    - vice president

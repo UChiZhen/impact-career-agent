@@ -1,0 +1,4 @@
+candidate_profile: examples/sample_data/candidate_profile.yaml
+jobs: examples/sample_data/jobs.json
+signals: examples/sample_data/signals.json
+output_dir: output/demo

@@ -1,0 +1,45 @@
+# Environment and secrets
+.env
+*.env
+!.env.example
+credentials.json
+token.json
+*.key
+
+# Private user data
+config/*.yaml
+!config/*.example.yaml
+private/
+profiles/
+resumes/
+
+# Generated outputs
+output/
+dist/
+build/
+*.egg-info/
+*.docx
+*.pdf
+*.png
+
+# Databases and logs
+data/*.db
+data/*.sqlite
+*.db
+*.sqlite
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
