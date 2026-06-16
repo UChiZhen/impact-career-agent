@@ -1,8 +1,12 @@
 import pytest
 
 from career_agent.llm import (
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    FallbackLLMProvider,
     LLMProviderError,
     LLMResponse,
+    GeminiProvider,
     MockLLMProvider,
     OpenAIProvider,
     parse_json_response,
@@ -51,3 +55,26 @@ def test_openai_provider_requires_api_key(monkeypatch):
 
     with pytest.raises(LLMProviderError, match="OPENAI_API_KEY"):
         provider.generate("hello")
+
+
+def test_default_provider_model_names():
+    assert OpenAIProvider(api_key="test").model == DEFAULT_OPENAI_MODEL
+    assert GeminiProvider(api_key="test").model == DEFAULT_GEMINI_MODEL
+
+
+def test_fallback_provider_uses_backup_when_primary_fails():
+    class BrokenProvider:
+        provider_name = "broken"
+        model = "broken-model"
+
+        def generate(self, prompt, *, system=None):
+            raise LLMProviderError("primary failed")
+
+    backup = MockLLMProvider(default_response='{"ok": true}')
+    provider = FallbackLLMProvider(BrokenProvider(), backup)
+
+    response = provider.generate("hello")
+
+    assert response.provider == "mock"
+    assert response.json_object() == {"ok": True}
+    assert response.usage["fallback_used"] == 1

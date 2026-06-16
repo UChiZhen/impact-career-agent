@@ -62,6 +62,16 @@ python -m career_agent.cli.main demo
 It uses fictional sample data and deterministic local scoring. It does not call
 OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
 
+For real LLM-backed runs, the planned default provider stack is:
+
+```bash
+OPENAI_MODEL=gpt-5.4-mini
+GEMINI_MODEL=gemini-3.1-flash-lite
+```
+
+OpenAI is the main provider. Gemini is kept as the backup provider for
+high-volume lightweight extraction and classification tasks.
+
 ## Privacy
 
 The project is designed around local-first operation. Credentials, OAuth tokens,
@@ -76,7 +86,8 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Define core data models.
 - [x] Add demo data and runnable CLI.
 - [x] Add LLM provider interface with mock/OpenAI/Gemini adapters.
-- [ ] Port job discovery and scoring modules.
+- [x] Port job-fit scoring contract.
+- [ ] Port job discovery modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.

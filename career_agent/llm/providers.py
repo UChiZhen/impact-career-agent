@@ -10,6 +10,10 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 
+DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+
+
 class LLMProviderError(RuntimeError):
     """Raised when an LLM provider cannot complete a request."""
 
@@ -106,6 +110,33 @@ class MockLLMProvider:
         )
 
 
+class FallbackLLMProvider:
+    """Try a primary provider, then a backup provider on failure."""
+
+    provider_name = "fallback"
+
+    def __init__(self, primary: LLMProvider, backup: LLMProvider):
+        self.primary = primary
+        self.backup = backup
+        self.model = f"{primary.model}->{backup.model}"
+
+    def generate(self, prompt: str, *, system: str | None = None) -> LLMResponse:
+        """Generate with primary provider and fall back to backup if needed."""
+        try:
+            return self.primary.generate(prompt, system=system)
+        except Exception as primary_error:
+            try:
+                response = self.backup.generate(prompt, system=system)
+            except Exception as backup_error:
+                raise LLMProviderError(
+                    f"primary and backup providers failed: {primary_error}; {backup_error}"
+                ) from backup_error
+
+            response.usage["fallback_used"] = 1
+            response.usage["primary_error_chars"] = len(str(primary_error))
+            return response
+
+
 class OpenAIProvider:
     """OpenAI Responses API adapter.
 
@@ -117,7 +148,7 @@ class OpenAIProvider:
     def __init__(
         self,
         *,
-        model: str | None = None,
+        model: str | None = DEFAULT_OPENAI_MODEL,
         api_key: str | None = None,
     ):
         self.model = model or os.getenv("OPENAI_MODEL")
@@ -174,7 +205,7 @@ class GeminiProvider:
     def __init__(
         self,
         *,
-        model: str | None = None,
+        model: str | None = DEFAULT_GEMINI_MODEL,
         api_key: str | None = None,
     ):
         self.model = model or os.getenv("GEMINI_MODEL")

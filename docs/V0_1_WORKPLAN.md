@@ -143,6 +143,17 @@ Reason:
 - Legacy actions such as `save_for_weekly` and `archive` should be mapped into
   the unified v0.1 action set: `apply_now`, `review`, and `skip`.
 
+Status: done.
+
+Implemented:
+
+- provider-agnostic job-fit prompt builder
+- LLM JSON response normalization
+- legacy action mapping
+- `FitScore` generation
+- single and batch opportunity scoring helpers
+- mock-provider tests with no API calls
+
 ### Step 6: Application material generation
 
 Port resume and cover-letter generation after scoring contracts are stable.

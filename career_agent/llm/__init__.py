@@ -1,6 +1,9 @@
 """LLM provider interfaces."""
 
 from career_agent.llm.providers import (
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENAI_MODEL,
+    FallbackLLMProvider,
     GeminiProvider,
     LLMProvider,
     LLMProviderError,
@@ -11,6 +14,9 @@ from career_agent.llm.providers import (
 )
 
 __all__ = [
+    "DEFAULT_GEMINI_MODEL",
+    "DEFAULT_OPENAI_MODEL",
+    "FallbackLLMProvider",
     "GeminiProvider",
     "LLMProvider",
     "LLMProviderError",
