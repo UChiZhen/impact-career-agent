@@ -117,6 +117,18 @@ Add provider protocol and adapters:
 
 Use mock provider in tests and demo.
 
+Status: done.
+
+Implemented:
+
+- provider protocol
+- normalized `LLMResponse`
+- JSON parsing helpers
+- deterministic `MockLLMProvider`
+- lazy optional `OpenAIProvider`
+- lazy optional `GeminiProvider`
+- provider tests with no API calls
+
 ### Step 5: Port first real module
 
 Recommended first port:

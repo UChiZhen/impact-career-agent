@@ -75,6 +75,7 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Create open-source project skeleton.
 - [x] Define core data models.
 - [x] Add demo data and runnable CLI.
+- [x] Add LLM provider interface with mock/OpenAI/Gemini adapters.
 - [ ] Port job discovery and scoring modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
