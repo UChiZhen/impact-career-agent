@@ -61,6 +61,8 @@ python -m career_agent.cli.main demo
 
 It uses fictional sample data and deterministic local scoring. It does not call
 OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
+The demo merges three fixture sources: career-page watchlist results, LinkedIn
+alert emails, and Apify-style LinkedIn keyword search results.
 
 For real LLM-backed runs, the planned default provider stack is:
 

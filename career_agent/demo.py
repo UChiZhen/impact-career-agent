@@ -8,6 +8,12 @@ from pathlib import Path
 import yaml
 
 from career_agent.core import CandidateProfile, FitScore, Opportunity, Signal
+from career_agent.sources import (
+    CareerPageFixtureSource,
+    LinkedInEmailFixtureSource,
+    LinkedInSearchFixtureSource,
+    fetch_all_opportunities,
+)
 
 
 DEFAULT_CONFIG_PATH = Path("examples/demo_config.yaml")
@@ -87,6 +93,46 @@ def load_opportunities(path: Path) -> list[Opportunity]:
         )
         for item in raw_jobs
     ]
+
+
+def load_demo_opportunities(config: dict, base_dir: Path) -> tuple[list[Opportunity], dict[str, int]]:
+    """Load and merge all configured demo opportunity sources."""
+    sources_config = config.get("sources", {})
+    source_providers = []
+
+    career_config = sources_config.get("career_pages", {})
+    if career_config.get("fixture_jobs"):
+        source_providers.append(
+            CareerPageFixtureSource(base_dir / career_config["fixture_jobs"])
+        )
+
+    email_config = sources_config.get("linkedin_email", {})
+    if email_config.get("fixture_jobs"):
+        source_providers.append(
+            LinkedInEmailFixtureSource(
+                base_dir / email_config["fixture_jobs"],
+                sender=email_config.get("sender", "jobalerts-noreply@linkedin.com"),
+                hours_back=int(email_config.get("hours_back", 26)),
+            )
+        )
+
+    search_config = sources_config.get("linkedin_search", {})
+    if search_config.get("fixture_jobs") and search_config.get("searches"):
+        source_providers.append(
+            LinkedInSearchFixtureSource(
+                base_dir / search_config["fixture_jobs"],
+                base_dir / search_config["searches"],
+            )
+        )
+
+    if not source_providers:
+        opportunities = load_opportunities(base_dir / config["jobs"])
+        return opportunities, {"legacy_jobs": len(opportunities), "deduped_total": len(opportunities)}
+
+    source_summary = {source.source_name: len(source.fetch()) for source in source_providers}
+    opportunities = fetch_all_opportunities(source_providers)
+    source_summary["deduped_total"] = len(opportunities)
+    return opportunities, source_summary
 
 
 def score_demo_opportunity(
@@ -197,14 +243,18 @@ def build_digest(
     candidate: CandidateProfile,
     signals: list[Signal],
     opportunities: list[Opportunity],
+    source_summary: dict[str, int] | None = None,
 ) -> str:
     """Render a plain-text digest preview."""
     lines = [
         "Impact Career Agent demo digest",
         f"Candidate: {candidate.name} ({candidate.location})",
-        "",
-        "Top signals",
     ]
+    if source_summary:
+        summary = ", ".join(f"{key}={value}" for key, value in source_summary.items())
+        lines.append(f"Sources: {summary}")
+
+    lines.extend(["", "Top signals"])
 
     for signal in signals[:3]:
         summary = f" - {signal.title}"
@@ -244,7 +294,7 @@ def run_demo(config_path: Path = DEFAULT_CONFIG_PATH) -> str:
 
     candidate = load_candidate_profile(base_dir / config["candidate_profile"])
     signals = load_signals(base_dir / config["signals"])
-    opportunities = load_opportunities(base_dir / config["jobs"])
+    opportunities, source_summary = load_demo_opportunities(config, base_dir)
     scored = [score_demo_opportunity(opportunity, candidate) for opportunity in opportunities]
 
-    return build_digest(candidate, signals, scored)
+    return build_digest(candidate, signals, scored, source_summary)
