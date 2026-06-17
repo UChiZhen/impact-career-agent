@@ -82,15 +82,28 @@ class LinkedInEmailSource:
         parse the Gmail payload into normalized `Opportunity` objects.
         """
         query = self.gmail_query(now=now)
+        messages = self.list_message_metadata(service, query)
+        return self.fetch_message_metadata_from_service(service, messages, query)
+
+    def list_message_metadata(self, service: Any, query: str) -> list[dict]:
+        """List Gmail message metadata for a query."""
         results = (
             service.users()
             .messages()
             .list(userId="me", q=query, maxResults=self.config.max_results)
             .execute()
         )
+        return results.get("messages", [])
 
+    def fetch_message_metadata_from_service(
+        self,
+        service: Any,
+        messages: list[dict],
+        query: str,
+    ) -> list[Opportunity]:
+        """Fetch full Gmail messages from metadata and parse opportunities."""
         opportunities: list[Opportunity] = []
-        for message_meta in results.get("messages", []):
+        for message_meta in messages:
             message = (
                 service.users()
                 .messages()

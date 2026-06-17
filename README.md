@@ -47,6 +47,7 @@ The first release will include:
 
 ```bash
 career-agent demo
+career-agent scan-linkedin-email --live
 career-agent scan-news --config examples/demo_config.yaml
 career-agent scan-jobs --config examples/demo_config.yaml
 career-agent score --input examples/sample_data/jobs.json
@@ -91,6 +92,16 @@ shared OAuth files:
 GOOGLE_CREDENTIALS_PATH=~/jobsearch/job-radar/config/credentials.json
 GOOGLE_TOKEN_PATH=~/jobsearch/job-radar/config/token.json
 ```
+
+Then scan recent LinkedIn alert emails:
+
+```bash
+career-agent scan-linkedin-email --live --hours-back 26 --max-results 5 --limit 10
+```
+
+The command prints only a safe summary: query, message count, opportunity
+count, and company/title/location rows. It does not print message bodies,
+OAuth tokens, or credentials.
 
 For real LLM-backed runs, the planned default provider stack is:
 
