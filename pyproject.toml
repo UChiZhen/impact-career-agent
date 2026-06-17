@@ -30,6 +30,9 @@ gmail = [
   "google-api-python-client>=2.0",
   "google-auth-oauthlib>=1.0",
 ]
+apify = [
+  "apify-client>=1.8",
+]
 docs = []
 
 [project.scripts]

@@ -121,12 +121,14 @@ The live connector status is:
 - `CareerPageSource`: future port of Job Radar career-page scraping.
 - `LinkedInEmailSource`: Gmail API query and payload parsing ported from
   `linkedin_email/src/gmail_reader.py`.
-- `LinkedInSearchSource`: future port of Apify keyword/location search.
+- `LinkedInSearchSource`: Apify keyword/location search ported from
+  `linkedin_email/src/apify_scraper.py`.
 
 In v0.1, credential-free fixture sources remain the default runnable
-implementation. The LinkedIn email live source is available behind optional
-Gmail dependencies and local OAuth configuration; remaining live sources still
-raise `NotImplementedError` until the old working code is ported.
+implementation. The LinkedIn email and LinkedIn search live sources are
+available behind optional Gmail/Apify dependencies and local credentials; the
+career-page live source still raises `NotImplementedError` until the old
+working code is ported.
 
 ## v0.1 Boundary
 

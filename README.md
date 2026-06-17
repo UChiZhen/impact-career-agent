@@ -103,6 +103,26 @@ The command prints only a safe summary: query, message count, opportunity
 count, and company/title/location rows. It does not print message bodies,
 OAuth tokens, or credentials.
 
+The live LinkedIn keyword search source preserves the original Apify settings:
+
+```bash
+APIFY_API_TOKEN=
+APIFY_ACTOR_ID=curious_coder~linkedin-jobs-scraper
+APIFY_MAX_RESULTS_PER_QUERY=10
+APIFY_ACTOR_TIMEOUT_SECONDS=30
+APIFY_MAX_TOTAL_JOBS=300
+```
+
+Install its optional dependency only when running that connector:
+
+```bash
+pip install "impact-career-agent[apify]"
+```
+
+The source builds LinkedIn search URLs with `f_TPR=r86400`, caps each query,
+deduplicates by LinkedIn job URL, and preserves `keyword`, `location`, `region`,
+and `category` provenance on each `Opportunity`.
+
 For real LLM-backed runs, the planned default provider stack is:
 
 ```bash

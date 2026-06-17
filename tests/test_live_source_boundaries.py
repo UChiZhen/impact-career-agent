@@ -14,6 +14,7 @@ from career_agent.sources import (
     LinkedInSearchSourceConfig,
     Organization,
 )
+from career_agent.sources.linkedin_search import build_linkedin_search_url
 
 
 def test_career_page_source_config_uses_watchlist_schema():
@@ -114,11 +115,111 @@ def test_linkedin_search_source_config_matches_apify_shape():
     assert config.queries[0].keyword == "impact investing analyst"
 
 
+def test_linkedin_search_source_config_reads_apify_env(monkeypatch):
+    query = LinkedInSearchQuery(
+        keyword="impact investing analyst",
+        location="United States",
+        region="united_states",
+        category="finance",
+    )
+    monkeypatch.setenv("APIFY_API_TOKEN", "local-token")
+    monkeypatch.setenv("APIFY_MAX_RESULTS_PER_QUERY", "7")
+    monkeypatch.setenv("APIFY_ACTOR_TIMEOUT_SECONDS", "25")
+    monkeypatch.setenv("APIFY_MAX_TOTAL_JOBS", "50")
+    monkeypatch.setenv("APIFY_INTER_QUERY_DELAY_SECONDS", "0")
+
+    config = LinkedInSearchSourceConfig.from_env(queries=(query,))
+
+    assert config.api_token == "local-token"
+    assert config.max_results_per_query == 7
+    assert config.actor_timeout_seconds == 25
+    assert config.max_total_jobs == 50
+    assert config.inter_query_delay_seconds == 0
+
+
+def test_build_linkedin_search_url_matches_legacy_shape():
+    url = build_linkedin_search_url("impact investing analyst", "United States")
+
+    assert url == (
+        "https://www.linkedin.com/jobs/search/"
+        "?keywords=impact%20investing%20analyst"
+        "&location=United%20States"
+        "&f_TPR=r86400"
+    )
+
+
+def test_linkedin_search_source_fetches_from_apify_client_boundary():
+    queries = (
+        LinkedInSearchQuery(
+            keyword="impact investing analyst",
+            location="United States",
+            region="united_states",
+            category="finance",
+        ),
+        LinkedInSearchQuery(
+            keyword="climate finance analyst",
+            location="United States",
+            region="united_states",
+            category="finance",
+        ),
+    )
+    client = FakeApifyClient(
+        datasets={
+            "dataset-1": [
+                {
+                    "jobUrl": "https://www.linkedin.com/jobs/view/123456/?trackingId=abc",
+                    "title": "Impact Investment Analyst",
+                    "companyName": "Example Capital",
+                    "location": "Chicago, IL",
+                    "postedAt": "2026-06-17",
+                    "description": "Impact investing role",
+                },
+                {
+                    "jobUrl": "https://www.linkedin.com/jobs/view/123456/?trackingId=duplicate",
+                    "title": "Impact Investment Analyst",
+                    "companyName": "Example Capital",
+                    "location": "Chicago, IL",
+                },
+            ],
+            "dataset-2": [
+                {
+                    "link": "https://www.linkedin.com/jobs/view/987654/?trk=public_jobs",
+                    "jobTitle": "Climate Finance Analyst",
+                    "company": "Example Green Bank",
+                    "jobLocation": "New York, NY",
+                    "applicantsCount": "12",
+                }
+            ],
+        }
+    )
+    source = LinkedInSearchSource(
+        LinkedInSearchSourceConfig(
+            queries=queries,
+            max_results_per_query=10,
+            inter_query_delay_seconds=0,
+        )
+    )
+
+    opportunities = source.fetch_from_client(client)
+
+    assert len(opportunities) == 2
+    assert client.actor_calls[0]["actor_id"] == "curious_coder~linkedin-jobs-scraper"
+    assert client.actor_calls[0]["timeout_secs"] == 30
+    assert client.actor_calls[0]["run_input"]["maxItems"] == 10
+    assert client.actor_calls[0]["run_input"]["scrapeJobDetails"] is False
+    assert opportunities[0].source == "linkedin_search"
+    assert opportunities[0].source_detail == "apify_keyword"
+    assert opportunities[0].company == "Example Capital"
+    assert opportunities[0].job_url == "https://www.linkedin.com/jobs/view/123456/"
+    assert opportunities[0].search_keyword == "impact investing analyst"
+    assert opportunities[0].search_region == "united_states"
+    assert opportunities[1].company == "Example Green Bank"
+
+
 @pytest.mark.parametrize(
     "source",
     [
         CareerPageSource(CareerPageSourceConfig(organizations=())),
-        LinkedInSearchSource(LinkedInSearchSourceConfig(queries=())),
     ],
 )
 def test_remaining_live_sources_are_explicitly_not_implemented_yet(source):
@@ -167,3 +268,41 @@ class FakeGmailService:
 
     def users(self):
         return FakeUsersResource(self)
+
+
+class FakeApifyActor:
+    def __init__(self, client, actor_id):
+        self.client = client
+        self.actor_id = actor_id
+
+    def call(self, *, run_input, timeout_secs):
+        dataset_id = f"dataset-{len(self.client.actor_calls) + 1}"
+        self.client.actor_calls.append(
+            {
+                "actor_id": self.actor_id,
+                "run_input": run_input,
+                "timeout_secs": timeout_secs,
+                "dataset_id": dataset_id,
+            }
+        )
+        return {"defaultDatasetId": dataset_id}
+
+
+class FakeApifyDataset:
+    def __init__(self, items):
+        self.items = items
+
+    def iterate_items(self):
+        return iter(self.items)
+
+
+class FakeApifyClient:
+    def __init__(self, *, datasets):
+        self.datasets = datasets
+        self.actor_calls = []
+
+    def actor(self, actor_id):
+        return FakeApifyActor(self, actor_id)
+
+    def dataset(self, dataset_id):
+        return FakeApifyDataset(self.datasets[dataset_id])
