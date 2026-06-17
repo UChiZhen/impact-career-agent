@@ -89,6 +89,33 @@ career_agent/
 | `auto_resume/src/docx_resume.py` | `career_agent/applications/docx_resume.py` |
 | `auto_resume/src/sheets_reader.py` | `career_agent/sinks/google_sheets.py` |
 
+## Opportunity Sources
+
+All job discovery inputs should normalize into `Opportunity` objects:
+
+```text
+career_page watchlist -> Opportunity[]
+LinkedIn alert emails -> Opportunity[]
+LinkedIn/Apify search -> Opportunity[]
+manual entries        -> Opportunity[]
+```
+
+The legacy LinkedIn email source queries Gmail with:
+
+```text
+from:jobalerts-noreply@linkedin.com after:YYYY/MM/DD
+```
+
+The legacy Apify search source uses query dictionaries shaped as:
+
+```text
+keyword, location, region, category
+```
+
+The v0.1 source layer preserves this provenance through `source`,
+`source_detail`, `search_keyword`, `search_location`, `search_region`,
+`search_category`, and `metadata`.
+
 ## v0.1 Boundary
 
 v0.1 should prioritize a clean, working demo and a tested core over feature

@@ -2,3 +2,18 @@ candidate_profile: examples/sample_data/candidate_profile.yaml
 jobs: examples/sample_data/jobs.json
 signals: examples/sample_data/signals.json
 output_dir: output/demo
+
+sources:
+  career_pages:
+    organizations: examples/sample_data/organizations.yaml
+    fixture_jobs: examples/sample_data/career_page_jobs.json
+  linkedin_email:
+    sender: jobalerts-noreply@linkedin.com
+    hours_back: 26
+    fixture_jobs: examples/sample_data/linkedin_email_jobs.json
+  linkedin_search:
+    provider: apify
+    searches: examples/sample_data/linkedin_searches.yaml
+    fixture_jobs: examples/sample_data/linkedin_search_jobs.json
+    daily_query_limit: 10
+    monthly_cost_cap_usd: 5

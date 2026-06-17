@@ -94,13 +94,19 @@ class Opportunity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source: OpportunitySource
+    source_detail: str | None = None
     job_title: str = Field(min_length=1)
     company: str = Field(min_length=1)
     location: str = ""
     job_url: str | None = None
+    origin_url: str | None = None
     description: str = ""
     post_date: str | None = None
     search_keyword: str | None = None
+    search_location: str | None = None
+    search_region: str | None = None
+    search_category: str | None = None
+    metadata: dict[str, str] = Field(default_factory=dict)
     fit: FitScore | None = None
     discovered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

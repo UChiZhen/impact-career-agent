@@ -1,0 +1,18 @@
+organizations:
+  - name: Example Impact Fund
+    career_url: https://example.org/careers
+    location: United States
+    industry: impact investing
+    priority: 1
+    tags:
+      - impact fund
+      - climate finance
+      - financial inclusion
+  - name: Example Development Finance Lab
+    career_url: https://example.org/dfi/jobs
+    location: United Kingdom
+    industry: development finance
+    priority: 2
+    tags:
+      - development finance
+      - policy

@@ -1,0 +1,14 @@
+[
+  {
+    "source": "apify_search",
+    "job_title": "Climate Finance Analyst",
+    "company": "Example Green Bank",
+    "location": "New York, NY",
+    "job_url": "https://www.linkedin.com/jobs/view/789012",
+    "description_snippet": "Analyze climate finance portfolios and prepare investment committee materials.",
+    "search_keyword": "climate finance analyst",
+    "search_location": "United States",
+    "search_region": "united_states",
+    "search_category": "finance"
+  }
+]

@@ -1,0 +1,18 @@
+searches:
+  united_states:
+    location: United States
+    finance:
+      - impact investing analyst
+      - climate finance analyst
+    measurement:
+      - impact analyst SQL
+    fellowship:
+      - impact fellowship analyst
+  united_kingdom:
+    location: United Kingdom
+    finance:
+      - sustainable investment graduate
+    measurement:
+      - social value analyst
+    fellowship:
+      - graduate scheme sustainability

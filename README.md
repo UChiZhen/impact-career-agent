@@ -72,6 +72,17 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 OpenAI is the main provider. Gemini is kept as the backup provider for
 high-volume lightweight extraction and classification tasks.
 
+## Opportunity Sources
+
+v0.1 normalizes three working discovery paths into one `Opportunity` pipeline:
+
+- target-organization career pages from a watchlist
+- LinkedIn alert emails from `jobalerts-noreply@linkedin.com`
+- LinkedIn keyword/location search through Apify
+
+The downstream scorer, digest, and resume-tailoring stages consume the same
+`Opportunity` model regardless of source.
+
 ## Privacy
 
 The project is designed around local-first operation. Credentials, OAuth tokens,
@@ -87,7 +98,8 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add demo data and runnable CLI.
 - [x] Add LLM provider interface with mock/OpenAI/Gemini adapters.
 - [x] Port job-fit scoring contract.
-- [ ] Port job discovery modules.
+- [x] Add opportunity source contract and fixture sources.
+- [ ] Port live job discovery modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.
