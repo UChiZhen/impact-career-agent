@@ -14,6 +14,9 @@ from career_agent.sources.opportunities import (
     normalize_legacy_source,
     opportunity_from_dict,
 )
+from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
+from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
+from career_agent.sources.linkedin_search import LinkedInSearchSource, LinkedInSearchSourceConfig
 
 __all__ = [
     "LINKEDIN_ALERT_SENDER",
@@ -28,4 +31,10 @@ __all__ = [
     "load_organizations",
     "normalize_legacy_source",
     "opportunity_from_dict",
+    "CareerPageSource",
+    "CareerPageSourceConfig",
+    "LinkedInEmailSource",
+    "LinkedInEmailSourceConfig",
+    "LinkedInSearchSource",
+    "LinkedInSearchSourceConfig",
 ]

@@ -116,6 +116,16 @@ The v0.1 source layer preserves this provenance through `source`,
 `source_detail`, `search_keyword`, `search_location`, `search_region`,
 `search_category`, and `metadata`.
 
+The live connector boundaries are:
+
+- `CareerPageSource`: future port of Job Radar career-page scraping.
+- `LinkedInEmailSource`: future port of Gmail LinkedIn alert parsing.
+- `LinkedInSearchSource`: future port of Apify keyword/location search.
+
+In v0.1, credential-free fixture sources are the runnable implementation. Live
+sources intentionally raise `NotImplementedError` until the old working code is
+ported behind these boundaries.
+
 ## v0.1 Boundary
 
 v0.1 should prioritize a clean, working demo and a tested core over feature

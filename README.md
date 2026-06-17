@@ -101,6 +101,7 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add LLM provider interface with mock/OpenAI/Gemini adapters.
 - [x] Port job-fit scoring contract.
 - [x] Add opportunity source contract and fixture sources.
+- [x] Add live source connector boundaries.
 - [ ] Port live job discovery modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
