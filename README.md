@@ -48,6 +48,7 @@ The first release will include:
 ```bash
 career-agent demo
 career-agent scan-linkedin-email --live
+career-agent scan-linkedin-search
 career-agent scan-news --config examples/demo_config.yaml
 career-agent scan-jobs --config examples/demo_config.yaml
 career-agent score --input examples/sample_data/jobs.json
@@ -122,6 +123,25 @@ pip install "impact-career-agent[apify]"
 The source builds LinkedIn search URLs with `f_TPR=r86400`, caps each query,
 deduplicates by LinkedIn job URL, and preserves `keyword`, `location`, `region`,
 and `category` provenance on each `Opportunity`.
+
+Preview the Apify query plan without calling Apify:
+
+```bash
+career-agent scan-linkedin-search \
+  --searches examples/sample_data/linkedin_searches.yaml \
+  --weekday 0 \
+  --limit 10
+```
+
+Run it live only when you are ready to spend Apify credits:
+
+```bash
+career-agent scan-linkedin-search --live \
+  --env-file /path/to/private/.env \
+  --searches /path/to/search_keywords.yaml \
+  --region united_states \
+  --max-results-per-query 3
+```
 
 For real LLM-backed runs, the planned default provider stack is:
 

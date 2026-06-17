@@ -3,7 +3,12 @@ from io import StringIO
 from types import SimpleNamespace
 
 from career_agent import __version__
-from career_agent.cli.main import linkedin_email_config_from_args, main
+from career_agent.cli.main import (
+    linkedin_email_config_from_args,
+    linkedin_search_config_from_args,
+    load_env_file,
+    main,
+)
 
 
 def test_version_command():
@@ -62,3 +67,80 @@ def test_linkedin_email_config_from_args_prefers_cli_over_env(monkeypatch):
     assert config.max_results == 5
     assert config.credentials_path == "~/new/credentials.json"
     assert config.token_path == "~/new/token.json"
+
+
+def test_scan_linkedin_search_dry_run_uses_weekday_rotation():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-linkedin-search",
+                "--searches",
+                "examples/sample_data/linkedin_searches.yaml",
+                "--weekday",
+                "0",
+                "--limit",
+                "2",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Mode: dry-run" in text
+    assert "Queries: 4" in text
+    assert "impact investing analyst" in text
+    assert "https://www.linkedin.com/jobs/search/" in text
+    assert "more queries" in text
+
+
+def test_scan_linkedin_search_command_uses_safe_live_summary(monkeypatch):
+    def fake_scan(args):
+        assert args.live is True
+        assert args.region == ["united_states"]
+        return "LinkedIn search scan\nMode: live\nOpportunities: 1"
+
+    monkeypatch.setattr("career_agent.cli.main.run_linkedin_search_scan", fake_scan)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-linkedin-search",
+                "--live",
+                "--region",
+                "united_states",
+            ]
+        )
+
+    assert exit_code == 0
+    assert "Mode: live" in output.getvalue()
+
+
+def test_load_env_file_keeps_existing_env_value(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("APIFY_API_TOKEN=file-token\nAPIFY_MAX_RESULTS_PER_QUERY=9\n")
+    monkeypatch.setenv("APIFY_API_TOKEN", "existing-token")
+
+    load_env_file(env_path)
+
+    import os
+
+    assert os.environ["APIFY_API_TOKEN"] == "existing-token"
+    assert os.environ["APIFY_MAX_RESULTS_PER_QUERY"] == "9"
+
+
+def test_linkedin_search_config_from_args_prefers_cli_max_results(monkeypatch):
+    monkeypatch.setenv("APIFY_API_TOKEN", "local-token")
+    monkeypatch.setenv("APIFY_MAX_RESULTS_PER_QUERY", "10")
+    args = SimpleNamespace(max_results_per_query=3)
+    query = SimpleNamespace(
+        keyword="impact investing analyst",
+        location="United States",
+        region="united_states",
+        category="finance",
+    )
+
+    config = linkedin_search_config_from_args(args, [query])
+
+    assert config.api_token == "local-token"
+    assert config.max_results_per_query == 3

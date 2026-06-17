@@ -8,6 +8,7 @@ from career_agent.sources import (
     LinkedInSearchFixtureSource,
     dedupe_opportunities,
     fetch_all_opportunities,
+    load_linkedin_search_queries,
     load_organizations,
     normalize_legacy_source,
     opportunity_from_dict,
@@ -82,6 +83,17 @@ def test_linkedin_search_fixture_queries_match_rotation_shape():
     ]
     assert opportunities[0].source == "linkedin_search"
     assert opportunities[0].source_detail == "apify_keyword"
+
+
+def test_load_linkedin_search_queries_supports_regions_and_all_regions():
+    path = Path("examples/sample_data/linkedin_searches.yaml")
+
+    region_queries = load_linkedin_search_queries(path, regions=["united_states"])
+    all_queries = load_linkedin_search_queries(path, all_regions=True)
+
+    assert len(region_queries) == 4
+    assert {query.region for query in region_queries} == {"united_states"}
+    assert len(all_queries) > len(region_queries)
 
 
 def test_fetch_all_opportunities_dedupes_across_sources():

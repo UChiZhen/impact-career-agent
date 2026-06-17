@@ -14,6 +14,15 @@ from career_agent.core import Opportunity
 
 
 LINKEDIN_ALERT_SENDER = "jobalerts-noreply@linkedin.com"
+LINKEDIN_SEARCH_ROTATION = {
+    0: ["united_states"],
+    1: ["united_kingdom", "uae"],
+    2: ["netherlands", "canada"],
+    3: ["singapore", "hong_kong"],
+    4: ["africa"],
+    5: [],
+    6: [],
+}
 
 
 class OpportunitySourceProvider(Protocol):
@@ -199,16 +208,6 @@ class LinkedInSearchFixtureSource:
 
     source_name = "linkedin_search"
 
-    ROTATION = {
-        0: ["united_states"],
-        1: ["united_kingdom", "uae"],
-        2: ["netherlands", "canada"],
-        3: ["singapore", "hong_kong"],
-        4: ["africa"],
-        5: [],
-        6: [],
-    }
-
     def __init__(
         self,
         jobs_path: Path,
@@ -222,30 +221,13 @@ class LinkedInSearchFixtureSource:
 
     def queries_for_today(self) -> list[LinkedInSearchQuery]:
         weekday = self.weekday if self.weekday is not None else datetime.now().weekday()
-        return self.queries_for_regions(self.ROTATION.get(weekday, []))
+        return self.queries_for_regions(LINKEDIN_SEARCH_ROTATION.get(weekday, []))
 
     def all_queries(self) -> list[LinkedInSearchQuery]:
-        config = _load_json_or_yaml(self.searches_path)
-        return self.queries_for_regions(list(config.get("searches", {}).keys()))
+        return load_linkedin_search_queries(self.searches_path, all_regions=True)
 
     def queries_for_regions(self, regions: list[str]) -> list[LinkedInSearchQuery]:
-        config = _load_json_or_yaml(self.searches_path)
-        queries: list[LinkedInSearchQuery] = []
-        for region_key, region_data in config.get("searches", {}).items():
-            if region_key not in regions:
-                continue
-            location = region_data.get("location", "")
-            for category in ("finance", "measurement", "fellowship"):
-                for keyword in region_data.get(category, []):
-                    queries.append(
-                        LinkedInSearchQuery(
-                            keyword=keyword,
-                            location=location,
-                            region=region_key,
-                            category=category,
-                        )
-                    )
-        return queries
+        return load_linkedin_search_queries(self.searches_path, regions=regions)
 
     def fetch(self) -> list[Opportunity]:
         data = _load_json_or_yaml(self.jobs_path)
@@ -273,6 +255,43 @@ def load_organizations(path: Path) -> list[Organization]:
         for row in rows
         if row.get("name") and row.get("career_url")
     ]
+
+
+def load_linkedin_search_queries(
+    path: Path,
+    *,
+    weekday: int | None = None,
+    regions: list[str] | None = None,
+    all_regions: bool = False,
+) -> list[LinkedInSearchQuery]:
+    """Load Apify LinkedIn search queries from the legacy YAML shape."""
+    config = _load_json_or_yaml(path)
+    searches = config.get("searches", {})
+
+    if all_regions:
+        selected_regions = list(searches.keys())
+    elif regions is not None:
+        selected_regions = regions
+    else:
+        selected_weekday = weekday if weekday is not None else datetime.now().weekday()
+        selected_regions = LINKEDIN_SEARCH_ROTATION.get(selected_weekday, [])
+
+    queries: list[LinkedInSearchQuery] = []
+    for region_key, region_data in searches.items():
+        if region_key not in selected_regions:
+            continue
+        location = region_data.get("location", "")
+        for category in ("finance", "measurement", "fellowship"):
+            for keyword in region_data.get(category, []):
+                queries.append(
+                    LinkedInSearchQuery(
+                        keyword=keyword,
+                        location=location,
+                        region=region_key,
+                        category=category,
+                    )
+                )
+    return queries
 
 
 def _load_json_or_yaml(path: Path):
