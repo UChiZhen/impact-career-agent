@@ -26,6 +26,10 @@ openai = [
 gemini = [
   "google-genai>=1.0,<2.0",
 ]
+gmail = [
+  "google-api-python-client>=2.0",
+  "google-auth-oauthlib>=1.0",
+]
 docs = []
 
 [project.scripts]

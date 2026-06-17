@@ -13,14 +13,21 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from email import policy
 from email.parser import BytesParser
 from html import unescape
 from html.parser import HTMLParser
+import os
+from pathlib import Path
 import re
+from typing import Any
 
 from career_agent.core import Opportunity
-from career_agent.sources.opportunities import LINKEDIN_ALERT_SENDER
+from career_agent.sources.opportunities import LINKEDIN_ALERT_SENDER, dedupe_opportunities
+
+
+GMAIL_READONLY_SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,17 @@ class LinkedInEmailSourceConfig:
     max_results: int = 20
     credentials_path: str | None = None
     token_path: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "LinkedInEmailSourceConfig":
+        """Build config from environment variables used by the migration path."""
+        return cls(
+            sender=os.getenv("LINKEDIN_ALERT_SENDER", LINKEDIN_ALERT_SENDER),
+            hours_back=int(os.getenv("LINKEDIN_ALERT_HOURS_BACK", "26")),
+            max_results=int(os.getenv("LINKEDIN_ALERT_MAX_RESULTS", "20")),
+            credentials_path=os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=os.getenv("GOOGLE_TOKEN_PATH"),
+        )
 
     def gmail_query(self, after_date: str) -> str:
         """Build the Gmail query used by the legacy parser."""
@@ -47,16 +65,102 @@ class LinkedInEmailSource:
         self.config = config
 
     def fetch(self) -> list[Opportunity]:
-        """Fetch opportunities from LinkedIn alert emails.
+        """Fetch LinkedIn alert opportunities through the Gmail API."""
+        service = self.build_gmail_service()
+        return self.fetch_from_service(service)
 
-        Porting target:
-        1. Authenticate with Gmail readonly scope.
-        2. Search for `config.gmail_query(after_date)`.
-        3. Parse HTML job cards and `/jobs/view/` links with
-           `parse_linkedin_alert_email_html`.
-        4. Normalize each result into `Opportunity(source="linkedin_email")`.
+    def fetch_from_service(
+        self,
+        service: Any,
+        *,
+        now: datetime | None = None,
+    ) -> list[Opportunity]:
+        """Fetch and parse LinkedIn alerts from an already-built Gmail service.
+
+        This mirrors the working legacy flow from `linkedin_email/src/gmail_reader.py`:
+        list messages by sender/date, get each message with `format=full`, then
+        parse the Gmail payload into normalized `Opportunity` objects.
         """
-        raise NotImplementedError("Live LinkedIn email parsing will be ported after v0.1 fixtures")
+        query = self.gmail_query(now=now)
+        results = (
+            service.users()
+            .messages()
+            .list(userId="me", q=query, maxResults=self.config.max_results)
+            .execute()
+        )
+
+        opportunities: list[Opportunity] = []
+        for message_meta in results.get("messages", []):
+            message = (
+                service.users()
+                .messages()
+                .get(userId="me", id=message_meta["id"], format="full")
+                .execute()
+            )
+            for opportunity in parse_gmail_message_payload(message):
+                opportunities.append(with_gmail_metadata(opportunity, message, query))
+
+        return dedupe_opportunities(opportunities)
+
+    def gmail_query(self, *, now: datetime | None = None) -> str:
+        reference_time = now or datetime.now()
+        after_date = (reference_time - timedelta(hours=self.config.hours_back)).strftime("%Y/%m/%d")
+        return self.config.gmail_query(after_date)
+
+    def build_gmail_service(self):
+        """Build a Gmail API service using local OAuth credentials."""
+        try:
+            from googleapiclient.discovery import build
+        except ImportError as exc:
+            raise RuntimeError(
+                "Gmail live source requires optional Google dependencies. "
+                "Install with `pip install 'impact-career-agent[gmail]'`."
+            ) from exc
+
+        credentials = self.get_credentials()
+        return build("gmail", "v1", credentials=credentials)
+
+    def get_credentials(self):
+        """Load, refresh, or create local OAuth credentials for Gmail readonly."""
+        try:
+            from google.auth.transport.requests import Request
+            from google.oauth2.credentials import Credentials
+            from google_auth_oauthlib.flow import InstalledAppFlow
+        except ImportError as exc:
+            raise RuntimeError(
+                "Gmail authentication requires optional Google dependencies. "
+                "Install with `pip install 'impact-career-agent[gmail]'`."
+            ) from exc
+
+        credentials_path = resolve_path(self.config.credentials_path)
+        token_path = resolve_path(self.config.token_path)
+        if credentials_path is None or token_path is None:
+            raise FileNotFoundError(
+                "Gmail live source needs credentials_path and token_path. "
+                "For your existing setup, point them at the old shared Google OAuth files."
+            )
+
+        credentials = None
+        if token_path.exists():
+            credentials = Credentials.from_authorized_user_file(str(token_path), GMAIL_READONLY_SCOPES)
+
+        if credentials and credentials.valid:
+            return credentials
+
+        if credentials and credentials.expired and credentials.refresh_token:
+            credentials.refresh(Request())
+        else:
+            if not credentials_path.exists():
+                raise FileNotFoundError(f"OAuth credentials not found at {credentials_path}")
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(credentials_path),
+                GMAIL_READONLY_SCOPES,
+            )
+            credentials = flow.run_local_server(port=0)
+
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        token_path.write_text(credentials.to_json(), encoding="utf-8")
+        return credentials
 
 
 class _AnchorTextParser(HTMLParser):
@@ -93,6 +197,27 @@ class _AnchorTextParser(HTMLParser):
             self.text_chunks.append(data)
         if self._current_href is not None and data:
             self._current_text.append(data)
+
+
+def resolve_path(value: str | None) -> Path | None:
+    """Resolve an optional local path without assuming a private machine layout."""
+    if not value:
+        return None
+    return Path(value).expanduser()
+
+
+def with_gmail_metadata(opportunity: Opportunity, message: dict, query: str) -> Opportunity:
+    """Attach Gmail provenance while keeping the core parser credential-free."""
+    metadata = {
+        **opportunity.metadata,
+        "gmail_query": query,
+    }
+    if message.get("id"):
+        metadata["gmail_message_id"] = str(message["id"])
+    if message.get("threadId"):
+        metadata["gmail_thread_id"] = str(message["threadId"])
+
+    return opportunity.model_copy(update={"metadata": metadata})
 
 
 def parse_linkedin_alert_email_html(

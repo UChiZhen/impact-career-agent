@@ -64,6 +64,34 @@ OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
 The demo merges three fixture sources: career-page watchlist results, LinkedIn
 alert emails, and Apify-style LinkedIn keyword search results.
 
+The live LinkedIn email source preserves the working Gmail flow from the
+original `linkedin_email` project:
+
+```text
+Google OAuth -> Gmail query -> messages.get(format="full") -> Opportunity[]
+```
+
+It queries:
+
+```text
+from:jobalerts-noreply@linkedin.com after:YYYY/MM/DD
+```
+
+Install the optional Gmail dependencies only when you want to run that live
+connector:
+
+```bash
+pip install "impact-career-agent[gmail]"
+```
+
+For a local migration from the original projects, point the new source at the
+shared OAuth files:
+
+```bash
+GOOGLE_CREDENTIALS_PATH=~/jobsearch/job-radar/config/credentials.json
+GOOGLE_TOKEN_PATH=~/jobsearch/job-radar/config/token.json
+```
+
 For real LLM-backed runs, the planned default provider stack is:
 
 ```bash

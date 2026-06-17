@@ -116,15 +116,17 @@ The v0.1 source layer preserves this provenance through `source`,
 `source_detail`, `search_keyword`, `search_location`, `search_region`,
 `search_category`, and `metadata`.
 
-The live connector boundaries are:
+The live connector status is:
 
 - `CareerPageSource`: future port of Job Radar career-page scraping.
-- `LinkedInEmailSource`: future port of Gmail LinkedIn alert parsing.
+- `LinkedInEmailSource`: Gmail API query and payload parsing ported from
+  `linkedin_email/src/gmail_reader.py`.
 - `LinkedInSearchSource`: future port of Apify keyword/location search.
 
-In v0.1, credential-free fixture sources are the runnable implementation. Live
-sources intentionally raise `NotImplementedError` until the old working code is
-ported behind these boundaries.
+In v0.1, credential-free fixture sources remain the default runnable
+implementation. The LinkedIn email live source is available behind optional
+Gmail dependencies and local OAuth configuration; remaining live sources still
+raise `NotImplementedError` until the old working code is ported.
 
 ## v0.1 Boundary
 
