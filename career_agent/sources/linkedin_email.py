@@ -11,7 +11,10 @@ The legacy source searches Gmail using:
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+from email import policy
+from email.parser import BytesParser
 from html import unescape
 from html.parser import HTMLParser
 import re
@@ -145,6 +148,150 @@ def parse_linkedin_alert_email_html(
     return parse_gmail_saved_linkedin_threads(html)
 
 
+def parse_linkedin_alert_email_text(
+    text: str,
+    *,
+    subject: str = "",
+    date: str = "",
+) -> list[Opportunity]:
+    """Parse LinkedIn's plain-text job alert body.
+
+    The real LinkedIn `.eml` export includes a text/plain part with compact
+    repeated blocks:
+
+    title, company, location, optional badges, then `View job: <url>`.
+    """
+    lines = [clean_text(line) for line in text.splitlines()]
+    opportunities: list[Opportunity] = []
+    seen_urls: set[str] = set()
+    block_start = 0
+
+    for index, line in enumerate(lines):
+        if is_separator_line(line):
+            block_start = index + 1
+            continue
+
+        if not line.lower().startswith("view job:"):
+            continue
+
+        raw_url = line.split(":", 1)[1].strip()
+        if not is_linkedin_job_url(raw_url):
+            continue
+
+        clean_url = clean_linkedin_url(raw_url)
+        if not clean_url or clean_url in seen_urls:
+            continue
+        seen_urls.add(clean_url)
+
+        context_start = max(block_start, index - 12)
+        block_lines = [
+            candidate
+            for candidate in lines[context_start:index]
+            if candidate
+            and not is_linkedin_alert_badge(candidate)
+            and not is_linkedin_alert_control_line(candidate)
+        ][-3:]
+        title = block_lines[0] if block_lines else infer_title_from_subject(subject)
+        company = (
+            block_lines[1]
+            if len(block_lines) > 1
+            else infer_company_from_subject(subject) or "LinkedIn"
+        )
+        location = block_lines[2] if len(block_lines) > 2 else ""
+
+        if not title:
+            continue
+
+        opportunities.append(
+            Opportunity(
+                source="linkedin_email",
+                source_detail="gmail_alert_text",
+                job_title=title,
+                company=company,
+                location=location,
+                job_url=clean_url,
+                metadata={
+                    "email_subject": subject,
+                    "email_date": date,
+                },
+            )
+        )
+
+    return opportunities
+
+
+def parse_linkedin_alert_eml(raw_email: bytes) -> list[Opportunity]:
+    """Parse a raw `.eml` LinkedIn alert export into opportunities."""
+    message = BytesParser(policy=policy.default).parsebytes(raw_email)
+    subject = str(message.get("Subject", ""))
+    date = str(message.get("Date", ""))
+
+    text_body = extract_email_message_body(message, "text/plain")
+    if text_body:
+        opportunities = parse_linkedin_alert_email_text(text_body, subject=subject, date=date)
+        if opportunities:
+            return opportunities
+
+    html_body = extract_email_message_body(message, "text/html")
+    if not html_body:
+        return []
+    return parse_linkedin_alert_email_html(html_body, subject=subject, date=date)
+
+
+def parse_gmail_message_payload(message: dict) -> list[Opportunity]:
+    """Parse a Gmail API `format=full` message payload into opportunities."""
+    payload = message.get("payload", {})
+    headers = {
+        header.get("name", ""): header.get("value", "")
+        for header in payload.get("headers", [])
+        if isinstance(header, dict)
+    }
+    subject = headers.get("Subject", "")
+    date = headers.get("Date", "")
+
+    text_body = extract_gmail_payload_body(payload, "text/plain")
+    if text_body:
+        opportunities = parse_linkedin_alert_email_text(text_body, subject=subject, date=date)
+        if opportunities:
+            return opportunities
+
+    html_body = extract_gmail_payload_body(payload, "text/html")
+    if not html_body:
+        return []
+    return parse_linkedin_alert_email_html(html_body, subject=subject, date=date)
+
+
+def extract_email_message_body(message, mime_type: str) -> str:
+    """Return the first body part matching `mime_type` from a parsed email."""
+    if message.get_content_type() == mime_type:
+        try:
+            return message.get_content()
+        except (LookupError, UnicodeDecodeError):
+            return ""
+
+    for part in message.iter_parts() if message.is_multipart() else []:
+        body = extract_email_message_body(part, mime_type)
+        if body:
+            return body
+
+    return ""
+
+
+def extract_gmail_payload_body(payload: dict, mime_type: str) -> str:
+    """Recursively decode the first Gmail payload body matching `mime_type`."""
+    if payload.get("mimeType") == mime_type:
+        data = payload.get("body", {}).get("data", "")
+        if data:
+            return decode_gmail_body_data(data)
+
+    for part in payload.get("parts", []):
+        body = extract_gmail_payload_body(part, mime_type)
+        if body:
+            return body
+
+    return ""
+
+
 def parse_gmail_saved_linkedin_threads(html: str) -> list[Opportunity]:
     """Parse LinkedIn job-alert thread metadata from a saved Gmail page.
 
@@ -236,7 +383,40 @@ def clean_linkedin_url(url: str) -> str:
 
 
 def is_linkedin_job_url(url: str) -> bool:
-    return "linkedin.com" in url and "/jobs/" in url
+    return bool(re.search(r"linkedin\.com/(?:comm/)?jobs/view/", url))
+
+
+def is_separator_line(value: str) -> bool:
+    return len(value) >= 8 and set(value) <= {"-"}
+
+
+def is_linkedin_alert_badge(value: str) -> bool:
+    lowered = value.lower()
+    badge_prefixes = (
+        "apply with ",
+        "fast growing",
+        "this company is actively hiring",
+    )
+    return lowered.startswith(badge_prefixes) or " connection" in lowered
+
+
+def is_linkedin_alert_control_line(value: str) -> bool:
+    lowered = value.lower()
+    control_prefixes = (
+        "your job alert for ",
+        "manage alerts",
+        "see all jobs",
+        "edit alert",
+        "results from ",
+        "new jobs from ",
+    )
+    return (
+        lowered.startswith(control_prefixes)
+        or "new jobs match your preferences" in lowered
+        or "linkedin.com/jobs/search-results" in lowered
+        or "linkedin.com/comm/jobs/search-results" in lowered
+        or "<strong" in lowered
+    )
 
 
 def clean_text(value: str) -> str:
@@ -258,6 +438,12 @@ def decode_js_escaped_text(value: str) -> str:
         decoded,
     )
     return clean_text(decoded)
+
+
+def decode_gmail_body_data(data: str) -> str:
+    """Decode Gmail API base64url body data with optional missing padding."""
+    padded = data + "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
 
 
 def extract_linkedin_subject(text: str) -> str:
