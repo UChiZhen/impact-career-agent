@@ -14,7 +14,11 @@ from career_agent.sources import (
     LinkedInSearchSourceConfig,
     Organization,
 )
-from career_agent.sources.linkedin_search import build_linkedin_search_url
+from career_agent.sources.linkedin_search import (
+    build_linkedin_search_url,
+    call_apify_actor,
+    default_dataset_id_from_run,
+)
 
 
 def test_career_page_source_config_uses_watchlist_schema():
@@ -216,6 +220,21 @@ def test_linkedin_search_source_fetches_from_apify_client_boundary():
     assert opportunities[1].company == "Example Green Bank"
 
 
+def test_call_apify_actor_supports_new_run_timeout_signature():
+    actor = FakeApifyActorV3()
+
+    run = call_apify_actor(actor, run_input={"hello": "world"}, timeout_seconds=30)
+
+    assert default_dataset_id_from_run(run) == "dataset-v3"
+    assert actor.run_input == {"hello": "world"}
+    assert actor.run_timeout.total_seconds() == 30
+    assert actor.logger is None
+
+
+def test_default_dataset_id_from_run_supports_legacy_dict():
+    assert default_dataset_id_from_run({"defaultDatasetId": "dataset-legacy"}) == "dataset-legacy"
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -306,3 +325,21 @@ class FakeApifyClient:
 
     def dataset(self, dataset_id):
         return FakeApifyDataset(self.datasets[dataset_id])
+
+
+class FakeApifyActorV3:
+    def __init__(self):
+        self.run_input = None
+        self.run_timeout = None
+        self.logger = "default"
+
+    def call(self, *, run_input, run_timeout, logger="default"):
+        self.run_input = run_input
+        self.run_timeout = run_timeout
+        self.logger = logger
+        return FakeRun(default_dataset_id="dataset-v3")
+
+
+class FakeRun:
+    def __init__(self, *, default_dataset_id):
+        self.default_dataset_id = default_dataset_id

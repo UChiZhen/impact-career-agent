@@ -13,6 +13,8 @@ The legacy source uses query dictionaries shaped as:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
+import inspect
 import os
 import re
 import time
@@ -120,11 +122,13 @@ class LinkedInSearchSource:
             "scrapeJobDetails": False,
             "proxy": {"useApifyProxy": True},
         }
-        run = client.actor(self.config.actor_id).call(
+        run = call_apify_actor(
+            client.actor(self.config.actor_id),
             run_input=run_input,
-            timeout_secs=self.config.actor_timeout_seconds,
+            timeout_seconds=self.config.actor_timeout_seconds,
         )
-        items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+        dataset_id = default_dataset_id_from_run(run)
+        items = list(client.dataset(dataset_id).iterate_items())
         return items[: self.config.max_results_per_query]
 
 
@@ -162,3 +166,32 @@ def normalize_apify_item(item: dict, query: LinkedInSearchQuery) -> dict:
         "search_region": query.region,
         "search_category": query.category,
     }
+
+
+def call_apify_actor(actor: Any, *, run_input: dict, timeout_seconds: int) -> dict:
+    """Call an Apify actor across client versions.
+
+    The original project used `timeout_secs`. Newer `apify-client` versions use
+    `run_timeout=timedelta(...)`.
+    """
+    call = actor.call
+    parameters = inspect.signature(call).parameters
+    kwargs: dict[str, Any] = {"run_input": run_input}
+    if "timeout_secs" in parameters:
+        kwargs["timeout_secs"] = timeout_seconds
+    elif "run_timeout" in parameters:
+        kwargs["run_timeout"] = timedelta(seconds=timeout_seconds)
+    if "logger" in parameters:
+        kwargs["logger"] = None
+    return call(**kwargs)
+
+
+def default_dataset_id_from_run(run: Any) -> str:
+    """Extract the default dataset id from old dict and new model run objects."""
+    if isinstance(run, dict):
+        return run.get("defaultDatasetId") or run["default_dataset_id"]
+
+    dataset_id = getattr(run, "default_dataset_id", None) or getattr(run, "defaultDatasetId", None)
+    if not dataset_id:
+        raise ValueError("Apify run did not include a default dataset id")
+    return dataset_id
