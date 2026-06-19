@@ -114,6 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Maximum queries or opportunities to print.",
     )
+    search_parser.add_argument(
+        "--query-limit",
+        type=int,
+        help="Maximum planned queries to execute. Useful for live smoke tests.",
+    )
     return parser
 
 
@@ -192,6 +197,8 @@ def run_linkedin_search_scan(args: argparse.Namespace) -> str:
         regions=args.region,
         all_regions=args.all_regions,
     )
+    if args.query_limit is not None:
+        queries = queries[: args.query_limit]
 
     if not args.live:
         return format_linkedin_search_dry_run(queries, args)

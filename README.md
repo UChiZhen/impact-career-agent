@@ -140,7 +140,8 @@ career-agent scan-linkedin-search --live \
   --env-file /path/to/private/.env \
   --searches /path/to/search_keywords.yaml \
   --region united_states \
-  --max-results-per-query 3
+  --query-limit 1 \
+  --max-results-per-query 1
 ```
 
 For real LLM-backed runs, the planned default provider stack is:

@@ -81,13 +81,15 @@ def test_scan_linkedin_search_dry_run_uses_weekday_rotation():
                 "0",
                 "--limit",
                 "2",
+                "--query-limit",
+                "3",
             ]
         )
 
     text = output.getvalue()
     assert exit_code == 0
     assert "Mode: dry-run" in text
-    assert "Queries: 4" in text
+    assert "Queries: 3" in text
     assert "impact investing analyst" in text
     assert "https://www.linkedin.com/jobs/search/" in text
     assert "more queries" in text
@@ -97,6 +99,7 @@ def test_scan_linkedin_search_command_uses_safe_live_summary(monkeypatch):
     def fake_scan(args):
         assert args.live is True
         assert args.region == ["united_states"]
+        assert args.query_limit == 1
         return "LinkedIn search scan\nMode: live\nOpportunities: 1"
 
     monkeypatch.setattr("career_agent.cli.main.run_linkedin_search_scan", fake_scan)
@@ -109,6 +112,8 @@ def test_scan_linkedin_search_command_uses_safe_live_summary(monkeypatch):
                 "--live",
                 "--region",
                 "united_states",
+                "--query-limit",
+                "1",
             ]
         )
 
