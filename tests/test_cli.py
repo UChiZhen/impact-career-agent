@@ -4,11 +4,13 @@ from types import SimpleNamespace
 
 from career_agent import __version__
 from career_agent.cli.main import (
+    format_job_scan_summary,
     linkedin_email_config_from_args,
     linkedin_search_config_from_args,
     load_env_file,
     main,
 )
+from career_agent.core import Opportunity
 
 
 def test_version_command():
@@ -149,3 +151,61 @@ def test_linkedin_search_config_from_args_prefers_cli_max_results(monkeypatch):
 
     assert config.api_token == "local-token"
     assert config.max_results_per_query == 3
+
+
+def test_scan_jobs_default_uses_fixture_sources():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["scan-jobs", "--config", "examples/demo_config.yaml"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Job scan summary" in text
+    assert "career_page: 1" in text
+    assert "linkedin_email: 1" in text
+    assert "linkedin_search: 1" in text
+    assert "deduped_total: 3" in text
+    assert "Details hidden" in text
+
+
+def test_scan_jobs_live_command_uses_safe_summary(monkeypatch):
+    monkeypatch.setattr(
+        "career_agent.cli.main.fetch_linkedin_email_opportunities_for_job_scan",
+        lambda args: [
+            Opportunity(
+                source="linkedin_email",
+                company="Example Capital",
+                job_title="Analyst",
+                location="Chicago",
+            )
+        ],
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["scan-jobs", "--linkedin-email-live", "--show-details"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "linkedin_email: 1" in text
+    assert "deduped_total: 1" in text
+    assert "Example Capital | Analyst | Chicago" in text
+
+
+def test_format_job_scan_summary_hides_details_by_default():
+    opportunity = Opportunity(
+        source="career_page",
+        company="Private Org",
+        job_title="Analyst",
+        location="Remote",
+    )
+
+    summary = format_job_scan_summary(
+        source_summary={"career_page": 1, "deduped_total": 1},
+        opportunities=[opportunity],
+        show_details=False,
+        limit=10,
+    )
+
+    assert "Private Org" not in summary
+    assert "Details hidden" in summary

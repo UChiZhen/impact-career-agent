@@ -47,6 +47,7 @@ The first release will include:
 
 ```bash
 career-agent demo
+career-agent scan-jobs
 career-agent scan-linkedin-email --live
 career-agent scan-linkedin-search
 career-agent scan-news --config examples/demo_config.yaml
@@ -65,6 +66,28 @@ It uses fictional sample data and deterministic local scoring. It does not call
 OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
 The demo merges three fixture sources: career-page watchlist results, LinkedIn
 alert emails, and Apify-style LinkedIn keyword search results.
+
+The unified job scanner defaults to the same credential-free fixture sources:
+
+```bash
+career-agent scan-jobs
+```
+
+Live sources are opt-in and can be composed:
+
+```bash
+career-agent scan-jobs \
+  --env-file /path/to/private/.env \
+  --watchlist-sheet-live \
+  --linkedin-email-live \
+  --credentials-path ~/jobsearch/job-radar/config/credentials.json \
+  --token-path ~/jobsearch/job-radar/config/token.json \
+  --watchlist-limit 1 \
+  --email-max-results 5
+```
+
+By default, `scan-jobs` prints counts only. Use `--show-details` when you
+explicitly want company/title/location rows in the terminal.
 
 The live LinkedIn email source preserves the working Gmail flow from the
 original `linkedin_email` project:

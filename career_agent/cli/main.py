@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from career_agent import __version__
-from career_agent.demo import DEFAULT_CONFIG_PATH, run_demo
-from career_agent.sources import load_linkedin_search_queries
+from career_agent.demo import DEFAULT_CONFIG_PATH, load_demo_config, load_demo_opportunities, run_demo
+from career_agent.llm import GeminiProvider
+from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
+from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
+from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
 from career_agent.sources.linkedin_search import (
     LinkedInSearchSource,
     LinkedInSearchSourceConfig,
     build_linkedin_search_url,
 )
+from career_agent.sources.watchlist import GoogleSheetsOrganizationSource, GoogleSheetsWatchlistConfig
 
 
 DEFAULT_LINKEDIN_SEARCHES_PATH = Path("examples/sample_data/linkedin_searches.yaml")
@@ -119,6 +124,90 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Maximum planned queries to execute. Useful for live smoke tests.",
     )
+
+    jobs_parser = subparsers.add_parser(
+        "scan-jobs",
+        help="Scan multiple opportunity sources into one pipeline.",
+    )
+    jobs_parser.add_argument(
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="Path to demo YAML config for fixture mode.",
+    )
+    jobs_parser.add_argument(
+        "--env-file",
+        help="Optional .env file to load before reading private settings.",
+    )
+    jobs_parser.add_argument(
+        "--linkedin-email-live",
+        action="store_true",
+        help="Include live Gmail LinkedIn alert source.",
+    )
+    jobs_parser.add_argument(
+        "--linkedin-search-live",
+        action="store_true",
+        help="Include live Apify LinkedIn keyword search source.",
+    )
+    jobs_parser.add_argument(
+        "--watchlist-sheet-live",
+        action="store_true",
+        help="Include live private Google Sheets watchlist career-page source.",
+    )
+    jobs_parser.add_argument("--credentials-path", help="Path to Google OAuth credentials JSON.")
+    jobs_parser.add_argument("--token-path", help="Path to Google OAuth token JSON.")
+    jobs_parser.add_argument("--sheet-id", help="Private Google Sheet ID for watchlist source.")
+    jobs_parser.add_argument(
+        "--watchlist-sheet-name",
+        default="Organizations",
+        help="Google Sheet tab name for organization watchlist.",
+    )
+    jobs_parser.add_argument(
+        "--watchlist-limit",
+        type=int,
+        default=1,
+        help="Maximum organizations to scan from the private watchlist.",
+    )
+    jobs_parser.add_argument(
+        "--email-max-results",
+        type=int,
+        default=5,
+        help="Maximum Gmail alert messages to scan.",
+    )
+    jobs_parser.add_argument(
+        "--email-hours-back",
+        type=int,
+        default=26,
+        help="Number of hours back for Gmail alert query.",
+    )
+    jobs_parser.add_argument(
+        "--searches",
+        default=str(DEFAULT_LINKEDIN_SEARCHES_PATH),
+        help="Path to LinkedIn search keyword YAML.",
+    )
+    jobs_parser.add_argument("--region", action="append", help="LinkedIn search region key.")
+    jobs_parser.add_argument(
+        "--query-limit",
+        type=int,
+        default=1,
+        help="Maximum Apify search queries to run when search live is enabled.",
+    )
+    jobs_parser.add_argument(
+        "--max-results-per-query",
+        type=int,
+        default=1,
+        help="Maximum Apify results per query when search live is enabled.",
+    )
+    jobs_parser.add_argument(
+        "--show-details",
+        action="store_true",
+        help="Print opportunity company/title/location rows.",
+    )
+    jobs_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum opportunity rows to print when --show-details is used.",
+    )
     return parser
 
 
@@ -143,6 +232,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "scan-linkedin-search":
         print(run_linkedin_search_scan(args))
+        return 0
+
+    if args.command == "scan-jobs":
+        print(run_job_scan(args))
         return 0
 
     parser.error(f"unknown command: {args.command}")
@@ -262,6 +355,136 @@ def linkedin_search_config_from_args(
         inter_query_delay_seconds=env_config.inter_query_delay_seconds,
         api_token=env_config.api_token,
     )
+
+
+def run_job_scan(args: argparse.Namespace) -> str:
+    """Scan selected opportunity sources and return a privacy-conscious summary."""
+    if args.env_file:
+        load_env_file(Path(args.env_file))
+
+    opportunities = []
+    source_summary: dict[str, int] = {}
+
+    live_enabled = (
+        args.linkedin_email_live
+        or args.linkedin_search_live
+        or args.watchlist_sheet_live
+    )
+
+    if not live_enabled:
+        config = load_demo_config(Path(args.config))
+        fixture_opportunities, fixture_summary = load_demo_opportunities(config, Path("."))
+        opportunities.extend(fixture_opportunities)
+        source_summary.update(fixture_summary)
+    else:
+        if args.linkedin_email_live:
+            email_opportunities = fetch_linkedin_email_opportunities_for_job_scan(args)
+            opportunities.extend(email_opportunities)
+            source_summary["linkedin_email"] = len(email_opportunities)
+
+        if args.linkedin_search_live:
+            search_opportunities = fetch_linkedin_search_opportunities_for_job_scan(args)
+            opportunities.extend(search_opportunities)
+            source_summary["linkedin_search"] = len(search_opportunities)
+
+        if args.watchlist_sheet_live:
+            career_opportunities, page_summary = fetch_watchlist_opportunities_for_job_scan(args)
+            opportunities.extend(career_opportunities)
+            source_summary.update(page_summary)
+            source_summary["career_page"] = len(career_opportunities)
+
+    deduped = dedupe_opportunities(opportunities)
+    source_summary["deduped_total"] = len(deduped)
+    return format_job_scan_summary(
+        source_summary=source_summary,
+        opportunities=deduped,
+        show_details=args.show_details,
+        limit=args.limit,
+    )
+
+
+def fetch_linkedin_email_opportunities_for_job_scan(args: argparse.Namespace):
+    config = LinkedInEmailSourceConfig(
+        credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+        token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+        hours_back=args.email_hours_back,
+        max_results=args.email_max_results,
+    )
+    return LinkedInEmailSource(config).fetch()
+
+
+def fetch_linkedin_search_opportunities_for_job_scan(args: argparse.Namespace):
+    queries = load_linkedin_search_queries(Path(args.searches), regions=args.region)
+    queries = queries[: args.query_limit]
+    config = LinkedInSearchSourceConfig.from_env(queries=tuple(queries))
+    config = LinkedInSearchSourceConfig(
+        queries=tuple(queries),
+        actor_id=config.actor_id,
+        max_results_per_query=args.max_results_per_query,
+        actor_timeout_seconds=config.actor_timeout_seconds,
+        max_total_jobs=config.max_total_jobs,
+        inter_query_delay_seconds=config.inter_query_delay_seconds,
+        api_token=config.api_token,
+    )
+    return LinkedInSearchSource(config).fetch()
+
+
+def fetch_watchlist_opportunities_for_job_scan(args: argparse.Namespace):
+    sheet_id = args.sheet_id or os.getenv("GOOGLE_SHEET_ID")
+    if not sheet_id:
+        raise RuntimeError("watchlist Sheet live source requires GOOGLE_SHEET_ID or --sheet-id")
+
+    watchlist = GoogleSheetsOrganizationSource(
+        GoogleSheetsWatchlistConfig(
+            spreadsheet_id=sheet_id,
+            sheet_name=args.watchlist_sheet_name,
+            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+        )
+    )
+    organizations = watchlist.fetch()
+    selected = organizations[: args.watchlist_limit]
+    snapshots = CareerPageSource(
+        CareerPageSourceConfig(organizations=tuple(selected), timeout_seconds=15)
+    ).fetch_pages()
+    provider = GeminiProvider()
+
+    opportunities = []
+    for snapshot in snapshots:
+        opportunities.extend(extract_opportunities_from_snapshot(snapshot, provider))
+
+    page_summary = {
+        "watchlist_organizations": len(organizations),
+        "watchlist_scanned": len(selected),
+        "career_pages_success": sum(1 for snapshot in snapshots if snapshot.success),
+    }
+    return opportunities, page_summary
+
+
+def format_job_scan_summary(
+    *,
+    source_summary: dict[str, int],
+    opportunities,
+    show_details: bool,
+    limit: int,
+) -> str:
+    lines = ["Job scan summary"]
+    for key, value in source_summary.items():
+        lines.append(f"{key}: {value}")
+
+    if show_details and opportunities:
+        lines.append("")
+        lines.append("Top opportunities")
+        for opportunity in opportunities[:limit]:
+            lines.append(
+                f" - {opportunity.source}: {opportunity.company} | "
+                f"{opportunity.job_title} | {opportunity.location}"
+            )
+    elif not show_details and opportunities:
+        lines.append("")
+        lines.append("Details hidden. Use --show-details to print company/title/location rows.")
+
+    return "\n".join(lines)
 
 
 def load_env_file(path: Path) -> None:
