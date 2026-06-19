@@ -165,12 +165,12 @@ Implemented:
 - migrated the matching cover-letter prompt into
   `career_agent/applications/cover_letter.py`
 - added `generate_application_packet()` for resume + cover-letter JSON bundles
+- added `career-agent draft-application` for credential-free packet previews
 - added fictional `examples/sample_data/master_resume.yaml`
 - added mock-provider tests with no private resume content or API calls
 
 Next:
 
-- add a CLI preview command for application packet generation
 - port DOCX resume and cover-letter renderers
 - keep real master resumes, generated DOCX/PDF/PNG, and templates out of git
 

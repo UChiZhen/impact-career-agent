@@ -7,7 +7,11 @@ import json
 import os
 from pathlib import Path
 
+import yaml
+
 from career_agent import __version__
+from career_agent.applications import generate_application_packet
+from career_agent.core import FitScore, Opportunity
 from career_agent.demo import (
     DEFAULT_CONFIG_PATH,
     load_candidate_profile,
@@ -15,7 +19,7 @@ from career_agent.demo import (
     load_demo_opportunities,
     run_demo,
 )
-from career_agent.llm import GeminiProvider, MockLLMProvider
+from career_agent.llm import GeminiProvider, LLMResponse, MockLLMProvider
 from career_agent.scoring.job_fit import score_opportunities
 from career_agent.scoring.signals import (
     mock_signal_score_response,
@@ -46,6 +50,8 @@ from career_agent.sources.watchlist import GoogleSheetsOrganizationSource, Googl
 
 
 DEFAULT_LINKEDIN_SEARCHES_PATH = Path("examples/sample_data/linkedin_searches.yaml")
+DEFAULT_MASTER_RESUME_PATH = Path("examples/sample_data/master_resume.yaml")
+DEFAULT_JOB_POSTING_PATH = Path("examples/sample_data/job_posting.md")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -61,6 +67,55 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=str(DEFAULT_CONFIG_PATH),
         help="Path to a demo YAML config file.",
+    )
+
+    application_parser = subparsers.add_parser(
+        "draft-application",
+        help="Generate a structured resume and cover-letter packet preview.",
+    )
+    application_parser.add_argument(
+        "--candidate-profile",
+        default="examples/sample_data/candidate_profile.yaml",
+        help="Candidate profile YAML.",
+    )
+    application_parser.add_argument(
+        "--master-resume",
+        default=str(DEFAULT_MASTER_RESUME_PATH),
+        help="Master resume YAML. Use the fictional sample by default.",
+    )
+    application_parser.add_argument(
+        "--job-description",
+        default=str(DEFAULT_JOB_POSTING_PATH),
+        help="Markdown/text job description file.",
+    )
+    application_parser.add_argument("--company", default="Example Impact Fund")
+    application_parser.add_argument("--job-title", default="Impact Investment Analyst")
+    application_parser.add_argument("--location", default="Chicago, IL")
+    application_parser.add_argument("--job-url", default="https://example.org/jobs/123")
+    application_parser.add_argument(
+        "--resume-angle",
+        default="Lead with impact finance analytics, Python, and due diligence experience.",
+    )
+    application_parser.add_argument(
+        "--fit-score",
+        type=int,
+        default=88,
+        help="Demo fit score attached to the opportunity.",
+    )
+    application_parser.add_argument(
+        "--provider",
+        choices=("mock", "gemini"),
+        default="mock",
+        help="Provider to use for generation.",
+    )
+    application_parser.add_argument(
+        "--env-file",
+        help="Optional .env file to load before using Gemini.",
+    )
+    application_parser.add_argument(
+        "--show-json",
+        action="store_true",
+        help="Print generated document JSON contents.",
     )
 
     email_parser = subparsers.add_parser(
@@ -418,6 +473,10 @@ def main(argv: list[str] | None = None) -> int:
         print(run_demo(Path(args.config)))
         return 0
 
+    if args.command == "draft-application":
+        print(run_application_draft(args))
+        return 0
+
     if args.command == "scan-linkedin-email":
         if not args.live:
             parser.error("scan-linkedin-email currently requires --live")
@@ -438,6 +497,165 @@ def main(argv: list[str] | None = None) -> int:
 
     parser.error(f"unknown command: {args.command}")
     return 2
+
+
+def run_application_draft(args: argparse.Namespace) -> str:
+    """Generate a structured application packet preview."""
+    if args.env_file:
+        load_env_file(Path(args.env_file))
+
+    candidate = load_candidate_profile(Path(args.candidate_profile))
+    master_resume = load_master_resume(Path(args.master_resume))
+    candidate = candidate.model_copy(update={"master_resume": master_resume})
+
+    opportunity = Opportunity(
+        source="manual",
+        company=args.company,
+        job_title=args.job_title,
+        location=args.location,
+        job_url=args.job_url,
+        description=Path(args.job_description).read_text(encoding="utf-8"),
+        fit=FitScore(
+            total=max(0, min(100, args.fit_score)),
+            recommended_action="apply_now" if args.fit_score >= 80 else "review",
+            match_summary="Demo fit score for application packet generation.",
+            top_reasons=["Local application draft preview."],
+            resume_angle=args.resume_angle,
+        ),
+    )
+    provider = application_provider_from_args(args, opportunity, candidate)
+    packet = generate_application_packet(opportunity, candidate, provider)
+    return format_application_packet_summary(packet, show_json=args.show_json)
+
+
+def load_master_resume(path: Path) -> dict:
+    """Load a master resume YAML file."""
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+class SequenceMockLLMProvider:
+    """Small local provider for multi-call CLI demos."""
+
+    provider_name = "mock"
+    model = "mock-application"
+
+    def __init__(self, responses: list[str]):
+        self.responses = list(responses)
+
+    def generate(self, prompt: str, *, system: str | None = None) -> LLMResponse:
+        text = self.responses.pop(0) if self.responses else "{}"
+        return LLMResponse(
+            provider=self.provider_name,
+            model=self.model,
+            text=text,
+            usage={"input_chars": len(prompt), "output_chars": len(text)},
+        )
+
+
+def application_provider_from_args(
+    args: argparse.Namespace,
+    opportunity: Opportunity,
+    candidate,
+):
+    """Build the selected provider for application drafting."""
+    if args.provider == "gemini":
+        return GeminiProvider()
+    return SequenceMockLLMProvider(
+        [
+            json.dumps(mock_tailored_resume_payload(opportunity, candidate)),
+            json.dumps(mock_cover_letter_payload(opportunity, candidate)),
+        ]
+    )
+
+
+def mock_tailored_resume_payload(opportunity: Opportunity, candidate) -> dict:
+    """Return deterministic tailored resume data for local previews."""
+    return {
+        "role_type": "finance" if "investment" in opportunity.job_title.lower() else "non_finance",
+        "summary_text": (
+            f"{candidate.name} is a mission-driven analyst with experience in "
+            f"impact finance, data analysis, and applied research for {opportunity.company}."
+        ),
+        "work_experience_header": "WORK EXPERIENCE",
+        "work_experience": [
+            {
+                "company": "Example Impact Fund",
+                "role": "Investment Research Fellow",
+                "location": "Chicago, IL",
+                "dates": "2025",
+                "bullets": [
+                    "Screened climate and financial inclusion investments using Python, SQL, and market research.",
+                    "Built comparison tools to translate portfolio performance indicators into investment insights.",
+                ],
+            }
+        ],
+        "combined_section_header": "SELECTED PROJECTS",
+        "combined_section": [
+            {
+                "name": "Impact Fund Tracker",
+                "role": "Open-source builder",
+                "location": "",
+                "dates": "2026",
+                "bullets": [
+                    "Designed a pipeline that converts GP, LP, and transaction signals into career actions.",
+                ],
+            }
+        ],
+        "skills": [
+            {"label": "Data Analysis & Programming", "value": "Python, SQL, R"},
+            {"label": "Finance", "value": "Financial modeling, due diligence, impact measurement"},
+            {"label": "Tools", "value": "Excel, Google Sheets, Git"},
+        ],
+        "audit_notes": ["Mock resume draft based on fictional public fixtures."],
+    }
+
+
+def mock_cover_letter_payload(opportunity: Opportunity, candidate) -> dict:
+    """Return deterministic cover letter data for local previews."""
+    return {
+        "greeting": f"Dear Hiring Committee at {opportunity.company},",
+        "paragraphs": [
+            (
+                f"I am excited to apply for the {opportunity.job_title} role. "
+                f"My background combines impact finance, data analysis, and clear writing."
+            ),
+            (
+                "In prior investment research work, I screened climate and financial inclusion "
+                "opportunities and translated quantitative findings into decision-ready materials."
+            ),
+            (
+                f"I would welcome the chance to bring that analytical discipline and mission focus "
+                f"to {opportunity.company}."
+            ),
+        ],
+        "closing": "Best regards,",
+        "signature": candidate.name,
+        "audit_notes": ["Mock cover letter draft based on fictional public fixtures."],
+    }
+
+
+def format_application_packet_summary(packet, *, show_json: bool) -> str:
+    """Format an application packet preview."""
+    lines = [
+        "Application packet draft",
+        f"Packet ID: {packet.packet_id}",
+        f"Candidate: {packet.candidate_name}",
+        f"Opportunity: {packet.opportunity.job_title} @ {packet.opportunity.company}",
+        f"Documents: {len(packet.documents)}",
+    ]
+    for document in packet.documents:
+        lines.append(f" - {document.document_type}: {document.format}")
+    if packet.audit_notes:
+        lines.append("Audit notes")
+        lines.extend(f" - {note}" for note in packet.audit_notes)
+    if show_json:
+        lines.append("")
+        lines.append("Generated documents")
+        for document in packet.documents:
+            lines.append(f"## {document.document_type}")
+            lines.append(document.content or "")
+    return "\n".join(lines)
 
 
 def run_linkedin_email_scan(args: argparse.Namespace) -> str:

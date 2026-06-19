@@ -52,8 +52,7 @@ career-agent scan-linkedin-email --live
 career-agent scan-linkedin-search
 career-agent scan-news
 career-agent scan-jobs --config examples/demo_config.yaml
-career-agent score --input examples/sample_data/jobs.json
-career-agent tailor --job examples/sample_data/job_posting.md
+career-agent draft-application
 ```
 
 The current demo is credential-free:
@@ -148,6 +147,22 @@ audit notes
 
 The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX,
 PDF, PNG rendering and Google Sheet write-back are planned follow-up modules.
+
+Preview this apply stage without any private resume or API key:
+
+```bash
+career-agent draft-application
+career-agent draft-application --show-json
+```
+
+Use Gemini explicitly when you want a live LLM draft:
+
+```bash
+career-agent draft-application \
+  --env-file /path/to/private/.env \
+  --provider gemini \
+  --master-resume /path/to/private/master_resume.yaml
+```
 
 News signals from `daily_news` are being migrated as a career-oriented capital
 signal engine. The default source pack is usable without API keys for public

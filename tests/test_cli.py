@@ -35,6 +35,32 @@ def test_demo_command():
     assert "not an external LLM" in text
 
 
+def test_draft_application_command_uses_mock_provider():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["draft-application"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Application packet draft" in text
+    assert "Impact Investment Analyst @ Example Impact Fund" in text
+    assert "resume: json" in text
+    assert "cover_letter: json" in text
+    assert "Mock resume draft" in text
+
+
+def test_draft_application_command_can_show_json():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["draft-application", "--show-json"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Generated documents" in text
+    assert '"summary_text"' in text
+    assert '"paragraphs"' in text
+
+
 def test_scan_linkedin_email_command_uses_safe_summary(monkeypatch):
     def fake_scan(args):
         assert args.live is True
