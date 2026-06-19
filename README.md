@@ -50,7 +50,7 @@ career-agent demo
 career-agent scan-jobs
 career-agent scan-linkedin-email --live
 career-agent scan-linkedin-search
-career-agent scan-news --config examples/demo_config.yaml
+career-agent scan-news
 career-agent scan-jobs --config examples/demo_config.yaml
 career-agent score --input examples/sample_data/jobs.json
 career-agent tailor --job examples/sample_data/job_posting.md
@@ -111,8 +111,33 @@ career-agent scan-jobs \
   --email-to you@example.com
 ```
 
-News signals from `daily_news` are not yet part of this unified digest. They are
-the next pipeline to migrate after email sending.
+News signals from `daily_news` are being migrated as a career-oriented capital
+signal engine. The default source pack uses public, high-signal sources and
+keeps premium newsletters behind user-provided access:
+
+```bash
+career-agent scan-news
+```
+
+The default mode is local-only and prints the configured source counts without
+calling the network. Fetch public RSS feeds only when explicitly requested:
+
+```bash
+career-agent scan-news --rss-live
+```
+
+ImpactAlpha newsletter parsing is supported through a local `.eml` sample for
+development smoke tests or through Gmail for users with their own subscription:
+
+```bash
+career-agent scan-news --impactalpha-eml /path/to/private/impactalpha.eml
+career-agent scan-news --impactalpha-email-live \
+  --credentials-path ~/path/to/credentials.json \
+  --token-path ~/path/to/token.json
+```
+
+By default, `scan-news` hides signal titles. Use `--show-details` only when you
+explicitly want article/deal titles in the terminal.
 
 The live LinkedIn email source preserves the working Gmail flow from the
 original `linkedin_email` project:
@@ -236,6 +261,34 @@ load a private watchlist, fetch career pages, extract readable text, compute
 content hashes, and use an LLM provider to extract structured jobs from a page
 snapshot.
 
+## Capital Signal Sources
+
+v0.1 treats news as a career lead generator, not a general reading list. Signals
+are classified into workflow-oriented types such as:
+
+```text
+fund_launch, fund_close, lp_commitment, transaction, portfolio_investment,
+new_office_or_region, strategic_partnership, program_or_grant,
+macro_tailwind, hiring_signal
+```
+
+The default public source pack lives at:
+
+```text
+examples/source_packs/impact_capital_signals.yaml
+```
+
+It focuses on:
+
+- impact investing
+- development finance
+- climate finance
+- community finance/CDFI-adjacent finance
+
+Premium or subscription sources should be added only through user-owned access,
+for example a Gmail newsletter connector or a user-provided API/export. The
+project does not scrape paywalled content by default.
+
 ## Privacy
 
 The project is designed around local-first operation. Credentials, OAuth tokens,
@@ -255,7 +308,7 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add live source connector boundaries.
 - [x] Port live job discovery modules.
 - [x] Add unified job scan scoring and Gmail digest sending.
-- [ ] Port news/signal discovery modules.
+- [x] Add public capital-signal source pack and ImpactAlpha newsletter parser.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.

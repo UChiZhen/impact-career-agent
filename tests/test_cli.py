@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from career_agent import __version__
 from career_agent.cli.main import (
     format_job_scan_summary,
+    format_news_scan_summary,
     linkedin_email_config_from_args,
     linkedin_search_config_from_args,
     load_env_file,
@@ -167,6 +168,40 @@ def test_scan_jobs_default_uses_fixture_sources():
     assert "linkedin_search: 1" in text
     assert "deduped_total: 3" in text
     assert "Details hidden" in text
+
+
+def test_scan_news_default_is_safe_source_pack_dry_run():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["scan-news"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "News signal scan" in text
+    assert "Source pack: impact_capital_signals" in text
+    assert "No live sources selected" in text
+
+
+def test_format_news_scan_summary_hides_titles_by_default():
+    from career_agent.core import Signal
+
+    signal = Signal(
+        source="ImpactAlpha",
+        title="Private newsletter title",
+        signal_subtype="fund_close",
+        suggested_action="rescan_org_jobs",
+    )
+
+    summary = format_news_scan_summary(
+        source_pack_name="demo",
+        source_summary={"impactalpha_eml": 1, "deduped_total": 1},
+        signals=[signal],
+        show_details=False,
+        limit=10,
+    )
+
+    assert "Private newsletter title" not in summary
+    assert "Details hidden" in summary
 
 
 def test_scan_jobs_can_score_with_mock_provider():

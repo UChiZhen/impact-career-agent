@@ -27,6 +27,15 @@ from career_agent.sources.linkedin_search import (
     LinkedInSearchSourceConfig,
     build_linkedin_search_url,
 )
+from career_agent.sources.news import (
+    DEFAULT_NEWS_SOURCE_PACK,
+    ImpactAlphaNewsletterConfig,
+    ImpactAlphaNewsletterSource,
+    RSSNewsSource,
+    RSSNewsSourceConfig,
+    load_news_source_pack,
+    parse_impactalpha_newsletter_eml,
+)
 from career_agent.sources.watchlist import GoogleSheetsOrganizationSource, GoogleSheetsWatchlistConfig
 
 
@@ -132,6 +141,55 @@ def build_parser() -> argparse.ArgumentParser:
         "--query-limit",
         type=int,
         help="Maximum planned queries to execute. Useful for live smoke tests.",
+    )
+
+    news_parser = subparsers.add_parser(
+        "scan-news",
+        help="Scan public and newsletter capital signals.",
+    )
+    news_parser.add_argument(
+        "--source-pack",
+        default=str(DEFAULT_NEWS_SOURCE_PACK),
+        help="Path to a public news source-pack YAML file.",
+    )
+    news_parser.add_argument(
+        "--rss-live",
+        action="store_true",
+        help="Fetch live public RSS feeds from the source pack.",
+    )
+    news_parser.add_argument(
+        "--impactalpha-eml",
+        help="Local ImpactAlpha .eml file to parse for development smoke tests.",
+    )
+    news_parser.add_argument(
+        "--impactalpha-email-live",
+        action="store_true",
+        help="Fetch ImpactAlpha newsletter emails through Gmail.",
+    )
+    news_parser.add_argument("--credentials-path", help="Path to Google OAuth credentials JSON.")
+    news_parser.add_argument("--token-path", help="Path to Google OAuth token JSON.")
+    news_parser.add_argument(
+        "--hours-back",
+        type=int,
+        default=26,
+        help="Number of hours back for the ImpactAlpha Gmail query.",
+    )
+    news_parser.add_argument(
+        "--max-results",
+        type=int,
+        default=10,
+        help="Maximum ImpactAlpha Gmail messages to scan.",
+    )
+    news_parser.add_argument(
+        "--show-details",
+        action="store_true",
+        help="Print signal titles and suggested actions.",
+    )
+    news_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum signal rows to print when --show-details is used.",
     )
 
     jobs_parser = subparsers.add_parser(
@@ -266,6 +324,10 @@ def main(argv: list[str] | None = None) -> int:
         print(run_linkedin_search_scan(args))
         return 0
 
+    if args.command == "scan-news":
+        print(run_news_scan(args))
+        return 0
+
     if args.command == "scan-jobs":
         print(run_job_scan(args))
         return 0
@@ -387,6 +449,81 @@ def linkedin_search_config_from_args(
         inter_query_delay_seconds=env_config.inter_query_delay_seconds,
         api_token=env_config.api_token,
     )
+
+
+def run_news_scan(args: argparse.Namespace) -> str:
+    """Scan capital-signal news sources and return a privacy-conscious summary."""
+    source_pack = load_news_source_pack(Path(args.source_pack))
+    signals = []
+    source_summary: dict[str, int] = {
+        "source_pack_rss_feeds": len(source_pack.rss_feeds),
+        "source_pack_web_sources": len(source_pack.web_sources),
+        "source_pack_regulatory_sources": len(source_pack.regulatory_sources),
+    }
+
+    if args.rss_live:
+        rss_signals = RSSNewsSource(RSSNewsSourceConfig(feeds=source_pack.rss_feeds)).fetch()
+        signals.extend(rss_signals)
+        source_summary["rss_news"] = len(rss_signals)
+
+    if args.impactalpha_eml:
+        eml_path = Path(args.impactalpha_eml).expanduser()
+        impactalpha_signals = parse_impactalpha_newsletter_eml(eml_path.read_bytes())
+        signals.extend(impactalpha_signals)
+        source_summary["impactalpha_eml"] = len(impactalpha_signals)
+
+    if args.impactalpha_email_live:
+        config = ImpactAlphaNewsletterConfig(
+            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+            hours_back=args.hours_back,
+            max_results=args.max_results,
+        )
+        impactalpha_signals = ImpactAlphaNewsletterSource(config).fetch()
+        signals.extend(impactalpha_signals)
+        source_summary["impactalpha_email"] = len(impactalpha_signals)
+
+    source_summary["deduped_total"] = len({signal.dedup_key for signal in signals})
+    return format_news_scan_summary(
+        source_pack_name=source_pack.name,
+        source_summary=source_summary,
+        signals=signals,
+        show_details=args.show_details,
+        limit=args.limit,
+    )
+
+
+def format_news_scan_summary(
+    *,
+    source_pack_name: str,
+    source_summary: dict[str, int],
+    signals,
+    show_details: bool,
+    limit: int,
+) -> str:
+    """Format a local-safe capital-signal summary."""
+    lines = ["News signal scan", f"Source pack: {source_pack_name}"]
+    for key, value in source_summary.items():
+        lines.append(f"{key}: {value}")
+
+    if show_details and signals:
+        lines.append("")
+        lines.append("Top signals")
+        for signal in signals[:limit]:
+            subtype = signal.signal_subtype or "news"
+            action = signal.suggested_action or "review"
+            lines.append(f" - {signal.source}: [{subtype}] {signal.title} -> {action}")
+    elif not show_details and signals:
+        lines.append("")
+        lines.append("Details hidden. Use --show-details to print signal titles.")
+    elif not signals:
+        lines.append("")
+        lines.append(
+            "No live sources selected. Add --rss-live, --impactalpha-eml, "
+            "or --impactalpha-email-live."
+        )
+
+    return "\n".join(lines)
 
 
 def run_job_scan(args: argparse.Namespace) -> str:

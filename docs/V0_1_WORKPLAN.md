@@ -158,6 +158,26 @@ Implemented:
 
 Port resume and cover-letter generation after scoring contracts are stable.
 
+### Step 6a: Capital signal discovery
+
+Status: in progress.
+
+Implemented:
+
+- public capital-signal source pack for impact investing, development finance,
+  climate finance, and community finance
+- RSS/Atom parsing into `Signal` objects
+- ImpactAlpha `.eml` and Gmail payload parsing for user-owned newsletter access
+- deterministic signal classification for fund launches, fund closes,
+  LP commitments, transactions, programs, and macro tailwinds
+- `career-agent scan-news` with safe default output
+
+Next:
+
+- add SEC Form D / EDGAR experimental source
+- score signals with Gemini/OpenAI against a user watchlist
+- merge top capital signals into the daily email digest
+
 ### Step 7: OSS readiness
 
 Before applying to Codex for OSS:
@@ -171,5 +191,4 @@ Before applying to Codex for OSS:
 
 ## Current Blockers
 
-- `pytest` is not installed in the current base Python environment.
 - No remote GitHub repository has been created yet.

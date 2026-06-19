@@ -46,10 +46,19 @@ class Signal(BaseModel):
     signal_type: SignalType = "news"
     url: str | None = None
     category: str | None = None
+    signal_subtype: str | None = None
     summary: str | None = None
     raw_text: str | None = None
     published_at: datetime | None = None
     relevance_score: int | None = Field(default=None, ge=0, le=10)
+    entities: list[str] = Field(default_factory=list)
+    geography: str | None = None
+    sector: str | None = None
+    capital_amount: str | None = None
+    career_hypothesis: str | None = None
+    suggested_action: str | None = None
+    confidence: int | None = Field(default=None, ge=0, le=10)
+    metadata: dict[str, str] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property

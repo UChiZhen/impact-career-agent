@@ -20,6 +20,18 @@ from career_agent.sources.career_extraction import extract_opportunities_from_sn
 from career_agent.sources.career_pages import CareerPageSnapshot, CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
 from career_agent.sources.linkedin_search import LinkedInSearchSource, LinkedInSearchSourceConfig
+from career_agent.sources.news import (
+    DEFAULT_NEWS_SOURCE_PACK,
+    IMPACTALPHA_SENDER,
+    ImpactAlphaNewsletterConfig,
+    ImpactAlphaNewsletterSource,
+    NewsFeedConfig,
+    NewsSourcePack,
+    RSSNewsSource,
+    RSSNewsSourceConfig,
+    load_news_source_pack,
+    parse_impactalpha_newsletter_eml,
+)
 from career_agent.sources.watchlist import (
     GoogleSheetsOrganizationSource,
     GoogleSheetsWatchlistConfig,
@@ -49,6 +61,16 @@ __all__ = [
     "LinkedInEmailSourceConfig",
     "LinkedInSearchSource",
     "LinkedInSearchSourceConfig",
+    "DEFAULT_NEWS_SOURCE_PACK",
+    "IMPACTALPHA_SENDER",
+    "ImpactAlphaNewsletterConfig",
+    "ImpactAlphaNewsletterSource",
+    "NewsFeedConfig",
+    "NewsSourcePack",
+    "RSSNewsSource",
+    "RSSNewsSourceConfig",
+    "load_news_source_pack",
+    "parse_impactalpha_newsletter_eml",
     "GoogleSheetsOrganizationSource",
     "GoogleSheetsWatchlistConfig",
     "organizations_from_sheet_values",

@@ -1,0 +1,60 @@
+name: impact_capital_signals
+verticals:
+  - impact_investing
+  - development_finance
+  - climate_finance
+  - community_finance
+
+rss_feeds:
+  - name: ImpactAlpha
+    url: https://impactalpha.com/feed/
+    category: impact_investing
+    vertical: impact_investing
+  - name: NextBillion
+    url: https://nextbillion.net/feed/
+    category: impact_investing
+    vertical: impact_investing
+
+web_sources:
+  - name: GIIN
+    url: https://thegiin.org/
+    category: impact_investing
+    vertical: impact_investing
+    source_role: industry_research_and_membership_signals
+  - name: ImpactAssets IA 50
+    url: https://impactassets.org/ia-50/
+    category: impact_investing
+    vertical: impact_investing
+    source_role: impact_fund_manager_discovery
+  - name: Convergence
+    url: https://www.convergence.finance/
+    category: blended_finance
+    vertical: development_finance
+    source_role: blended_finance_deal_and_member_signals
+  - name: DFC Transaction Data
+    url: https://www.dfc.gov/our-impact/transaction-data
+    category: development_finance
+    vertical: development_finance
+    source_role: dfi_transaction_data
+  - name: IFC Pressroom
+    url: https://www.ifc.org/en/pressroom
+    category: development_finance
+    vertical: development_finance
+    source_role: dfi_press_and_investment_signals
+  - name: CTVC
+    url: https://www.ctvc.co/
+    category: climate_finance
+    vertical: climate_finance
+    source_role: climate_capital_newsletter_and_market_signals
+
+regulatory_sources:
+  - name: SEC Form D
+    url: https://www.sec.gov/resources-small-businesses/small-business-compliance-guides/filing-amending-form-d-notice
+    category: regulatory
+    vertical: impact_investing
+    source_role: private_fundraising_and_new_fund_signal
+  - name: SEC EDGAR APIs
+    url: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+    category: regulatory
+    vertical: impact_investing
+    source_role: unauthenticated_public_filing_api

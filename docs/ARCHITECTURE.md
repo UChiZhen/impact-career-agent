@@ -16,6 +16,8 @@ A `Signal` is a piece of context that may affect career decisions. Examples:
 - market indicator
 - X/Twitter post
 - weekly industry summary
+- GP/LP/DFI capital signal such as a fund close, LP commitment, transaction, or
+  new program launch
 
 ### Opportunity
 
@@ -76,7 +78,7 @@ career_agent/
 
 | Current project | Future module |
 | --- | --- |
-| `daily_news/src/rss_fetcher.py` | `career_agent/sources/rss.py` |
+| `daily_news/src/rss_fetcher.py` | `career_agent/sources/news.py` |
 | `daily_news/src/market_fetcher.py` | `career_agent/sources/market.py` |
 | `daily_news/src/scorer.py` | `career_agent/scoring/signals.py` |
 | `jobsearch/job-radar/src/scraper.py` | `career_agent/sources/career_pages.py` |
@@ -124,11 +126,38 @@ The live connector status is:
 - `LinkedInSearchSource`: Apify keyword/location search ported from
   `linkedin_email/src/apify_scraper.py`.
 
+## Capital Signal Sources
+
+The news layer is being ported as a capital-signal engine. Its job is to find
+career-relevant market movement, not to summarize every article. A signal can
+be classified as:
+
+```text
+fund_launch, fund_close, lp_commitment, transaction, portfolio_investment,
+new_office_or_region, hiring_signal, program_or_grant, macro_tailwind
+```
+
+Default public sources are configured through:
+
+```text
+examples/source_packs/impact_capital_signals.yaml
+```
+
+The current implementation includes:
+
+- `RSSNewsSource`: public RSS/Atom feed parsing into `Signal` objects.
+- `ImpactAlphaNewsletterSource`: optional Gmail connector for a user's own
+  ImpactAlpha subscription.
+- `parse_impactalpha_newsletter_eml`: local `.eml` parser for development
+  smoke tests without committing private emails.
+
+Premium sources such as PitchBook, private newsletters, or paid datasets should
+be integrated through user-owned API/export/newsletter access. The default OSS
+configuration should not scrape paywalled content.
+
 In v0.1, credential-free fixture sources remain the default runnable
-implementation. The LinkedIn email and LinkedIn search live sources are
-available behind optional Gmail/Apify dependencies and local credentials; the
-career-page live source still raises `NotImplementedError` until the old
-working code is ported.
+implementation. Live sources are opt-in behind optional dependencies and local
+credentials.
 
 ## v0.1 Boundary
 

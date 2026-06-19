@@ -1,0 +1,164 @@
+import base64
+from email.message import EmailMessage
+import os
+from pathlib import Path
+
+from career_agent.sources.news import (
+    IMPACTALPHA_SENDER,
+    ImpactAlphaNewsletterConfig,
+    NewsFeedConfig,
+    classify_capital_signal,
+    load_news_source_pack,
+    parse_impactalpha_gmail_payload,
+    parse_impactalpha_newsletter_eml,
+    parse_impactalpha_newsletter_html,
+    signals_from_rss_xml,
+)
+
+
+def test_load_impact_capital_signal_source_pack():
+    source_pack = load_news_source_pack(Path("examples/source_packs/impact_capital_signals.yaml"))
+
+    assert source_pack.name == "impact_capital_signals"
+    assert "impact_investing" in source_pack.verticals
+    assert len(source_pack.rss_feeds) >= 2
+    assert any(source["name"] == "SEC Form D" for source in source_pack.regulatory_sources)
+
+
+def test_signals_from_rss_xml_enriches_capital_signal():
+    xml = """
+    <rss>
+      <channel>
+        <item>
+          <title>Example Impact Fund closes new climate vehicle</title>
+          <link>https://example.org/fund-close</link>
+          <description>Fresh capital for climate finance.</description>
+          <pubDate>Thu, 18 Jun 2026 07:04:32 -0400</pubDate>
+        </item>
+      </channel>
+    </rss>
+    """
+
+    signals = signals_from_rss_xml(
+        xml,
+        NewsFeedConfig(
+            name="Example Feed",
+            url="https://example.org/feed",
+            category="climate_finance",
+            vertical="climate_finance",
+        ),
+    )
+
+    assert len(signals) == 1
+    assert signals[0].source == "Example Feed"
+    assert signals[0].signal_subtype == "fund_close"
+    assert signals[0].suggested_action == "rescan_org_jobs"
+    assert signals[0].metadata["vertical"] == "climate_finance"
+
+
+def test_parse_impactalpha_newsletter_html_extracts_content_links():
+    html = """
+    <html>
+      <body>
+        <a href="https://example.com/preferences">Manage preferences</a>
+        <a href="https://track.example.com/c/abc">New GP launches climate adaptation fund</a>
+        <a href="https://track.example.com/c/def">Read more</a>
+      </body>
+    </html>
+    """
+
+    signals = parse_impactalpha_newsletter_html(
+        html,
+        subject="The Brief: Sharing AI power along with wealth",
+        date="Thu, 18 Jun 2026 07:04:32 -0400",
+    )
+
+    assert len(signals) == 1
+    assert signals[0].source == "ImpactAlpha"
+    assert signals[0].title == "New GP launches climate adaptation fund"
+    assert signals[0].signal_subtype == "fund_launch"
+    assert signals[0].metadata["source_detail"] == "impactalpha_html"
+
+
+def test_parse_impactalpha_newsletter_eml_prefers_html():
+    message = EmailMessage()
+    message["From"] = f"ImpactAlpha <{IMPACTALPHA_SENDER}>"
+    message["Subject"] = "The Brief: Sharing AI power along with wealth"
+    message["Date"] = "Thu, 18 Jun 2026 07:04:32 -0400"
+    message.set_content(
+        """
+        Impact fund closes new vehicle
+        https://track.example.com/text
+        """
+    )
+    message.add_alternative(
+        """
+        <html><body>
+          <a href="https://track.example.com/html">LP commits to community finance fund</a>
+        </body></html>
+        """,
+        subtype="html",
+    )
+
+    signals = parse_impactalpha_newsletter_eml(message.as_bytes())
+
+    assert len(signals) == 1
+    assert signals[0].title == "LP commits to community finance fund"
+    assert signals[0].signal_subtype == "lp_commitment"
+
+
+def test_parse_impactalpha_gmail_payload_decodes_html_body():
+    html = """
+    <html><body>
+      <a href="https://track.example.com/deal">DFI invests in affordable housing platform</a>
+    </body></html>
+    """
+    encoded_body = base64.urlsafe_b64encode(html.encode("utf-8")).decode("utf-8").rstrip("=")
+    payload = {
+        "payload": {
+            "headers": [
+                {"name": "Subject", "value": "The Brief: Development finance moves"},
+                {"name": "Date", "value": "Thu, 18 Jun 2026 07:04:32 -0400"},
+            ],
+            "mimeType": "multipart/alternative",
+            "parts": [
+                {
+                    "mimeType": "text/html",
+                    "body": {"data": encoded_body},
+                }
+            ],
+        }
+    }
+
+    signals = parse_impactalpha_gmail_payload(payload)
+
+    assert len(signals) == 1
+    assert signals[0].signal_subtype == "transaction"
+
+
+def test_impactalpha_config_builds_sender_query():
+    config = ImpactAlphaNewsletterConfig(hours_back=12)
+
+    assert config.gmail_query("2026/06/18") == "from:editor@impactalpha.com after:2026/06/18"
+
+
+def test_classify_capital_signal_programs():
+    assert classify_capital_signal("new accelerator program for climate founders") == (
+        "program_or_grant"
+    )
+
+
+def test_local_impactalpha_eml_smoke_if_configured():
+    """Optional private smoke test for a maintainer-provided `.eml` file."""
+    sample_path = os.environ.get("IMPACTALPHA_SAMPLE_EML")
+    if not sample_path:
+        return
+
+    path = Path(sample_path)
+    if not path.exists():
+        return
+
+    signals = parse_impactalpha_newsletter_eml(path.read_bytes())
+
+    assert signals
+    assert all(signal.source == "ImpactAlpha" for signal in signals)
