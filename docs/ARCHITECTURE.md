@@ -183,6 +183,30 @@ The combined daily digest can include scored `Capital Signals` before job
 opportunities. This is opt-in through `scan-jobs --include-news`; existing job
 digests remain unchanged unless news is explicitly requested.
 
+## Application Generation
+
+The first `auto_resume` migration layer is provider-agnostic structured
+generation:
+
+```text
+Opportunity + CandidateProfile.master_resume + LLMProvider
+  -> tailored resume JSON
+  -> matching cover letter JSON
+  -> ApplicationPacket
+```
+
+The current modules are:
+
+- `career_agent/applications/resume.py`: migrates the resume-tailoring prompt
+  and normalizes LLM JSON into a stable resume plan.
+- `career_agent/applications/cover_letter.py`: writes a matching cover letter
+  from the same tailored resume selection.
+- `career_agent/applications/packets.py`: bundles generated documents and audit
+  notes into an `ApplicationPacket`.
+
+DOCX/PDF/PNG rendering remains a separate migration layer so private resumes,
+templates, and generated files stay out of the public v0.1 fixtures.
+
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local
 credentials.

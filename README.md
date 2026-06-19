@@ -136,6 +136,19 @@ career-agent scan-jobs \
   --email-to you@example.com
 ```
 
+The application-generation contract from `auto_resume` is now available as
+structured JSON generation. It converts one scored `Opportunity` plus a
+candidate `master_resume` into an `ApplicationPacket` containing:
+
+```text
+tailored resume JSON
+cover letter JSON
+audit notes
+```
+
+The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX,
+PDF, PNG rendering and Google Sheet write-back are planned follow-up modules.
+
 News signals from `daily_news` are being migrated as a career-oriented capital
 signal engine. The default source pack is usable without API keys for public
 RSS signals, and premium newsletters stay behind user-provided access:
@@ -380,7 +393,8 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add unified job scan scoring and Gmail digest sending.
 - [x] Add public capital-signal source pack and ImpactAlpha newsletter parser.
 - [x] Add source health checks and career-oriented signal scoring.
-- [ ] Port application document generation.
+- [x] Add structured resume and cover-letter generation contracts.
+- [ ] Port DOCX/PDF application rendering.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.
 

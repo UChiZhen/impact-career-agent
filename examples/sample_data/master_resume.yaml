@@ -1,0 +1,53 @@
+personal:
+  name: Jane Doe
+  email: jane.doe@example.com
+  location: Chicago, IL
+
+education:
+  - school: Example University
+    degree: Master of Public Policy
+    dates: 2024-2026
+    details: Concentration in impact finance and data analytics.
+
+work_experience:
+  - company: Example Impact Fund
+    role: Investment Research Fellow
+    location: Chicago, IL
+    dates: 2025
+    bullets:
+      - Screened climate and financial inclusion investments using market research and financial analysis.
+      - Built Python and spreadsheet tools to compare portfolio performance indicators.
+  - company: Civic Data Lab
+    role: Data Analyst
+    location: Remote
+    dates: 2023-2024
+    bullets:
+      - Analyzed public finance datasets with SQL and Python to support policy recommendations.
+      - Produced dashboards translating technical findings for nontechnical stakeholders.
+
+leadership:
+  - org: Net Impact Chapter
+    role: Career Trek Lead
+    dates: 2025
+    bullets:
+      - Organized employer conversations with impact investing and community finance practitioners.
+
+projects:
+  - name: Impact Fund Tracker
+    description: Open-source project tracking emerging GP, LP, and transaction signals.
+    bullets:
+      - Designed a structured pipeline to classify public capital-market signals into career actions.
+
+skills:
+  data_analysis:
+    - Python
+    - SQL
+    - R
+  finance:
+    - Financial modeling
+    - Due diligence
+    - Impact measurement
+  tools:
+    - Excel
+    - Google Sheets
+    - Git
