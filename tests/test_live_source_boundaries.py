@@ -14,6 +14,11 @@ from career_agent.sources import (
     LinkedInSearchSourceConfig,
     Organization,
 )
+from career_agent.sources.career_pages import (
+    compute_content_hash,
+    extract_page_text,
+    truncate_text,
+)
 from career_agent.sources.linkedin_search import (
     build_linkedin_search_url,
     call_apify_actor,
@@ -34,6 +39,65 @@ def test_career_page_source_config_uses_watchlist_schema():
 
     assert config.organizations[0].name == "Example Impact Fund"
     assert config.use_content_cache is True
+
+
+def test_career_page_text_extraction_uses_visible_content():
+    html = """
+    <html>
+      <head><style>.hidden { display: none; }</style></head>
+      <body>
+        <h1>Careers</h1>
+        <script>window.secret = "ignore";</script>
+        <a href="/jobs/analyst">Impact Investment Analyst</a>
+        <p>Chicago, IL</p>
+      </body>
+    </html>
+    """
+
+    text = extract_page_text(html)
+
+    assert "Careers" in text
+    assert "Impact Investment Analyst" in text
+    assert "window.secret" not in text
+    assert compute_content_hash("A  B") == compute_content_hash("A B")
+
+
+def test_career_page_source_fetches_page_snapshots(monkeypatch):
+    org = Organization(
+        name="Example Impact Fund",
+        career_url="https://example.org/careers",
+        location="United States",
+        industry="impact investing",
+    )
+
+    def fake_fetch_url_text(url, *, timeout_seconds, user_agent):
+        assert url == "https://example.org/careers"
+        assert timeout_seconds == 5
+        assert user_agent
+        return "<html><body><h1>Careers</h1><p>Analyst role</p></body></html>"
+
+    monkeypatch.setattr("career_agent.sources.career_pages.fetch_url_text", fake_fetch_url_text)
+    source = CareerPageSource(
+        CareerPageSourceConfig(
+            organizations=(org,),
+            timeout_seconds=5,
+        )
+    )
+
+    snapshots = source.fetch_pages()
+
+    assert len(snapshots) == 1
+    assert snapshots[0].success is True
+    assert snapshots[0].organization.name == "Example Impact Fund"
+    assert "Analyst role" in snapshots[0].raw_text
+    assert snapshots[0].content_hash
+    assert snapshots[0].char_count == len(snapshots[0].raw_text)
+
+
+def test_truncate_text_marks_truncated_content():
+    text = truncate_text("A long sentence. Another sentence.", max_chars=16)
+
+    assert "[Content truncated...]" in text
 
 
 def test_linkedin_email_source_config_uses_real_sender_default():

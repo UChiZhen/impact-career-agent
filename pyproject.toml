@@ -33,6 +33,10 @@ gmail = [
 apify = [
   "apify-client>=1.8",
 ]
+career-pages = [
+  "requests>=2.31",
+  "trafilatura>=1.8",
+]
 docs = []
 
 [project.scripts]
