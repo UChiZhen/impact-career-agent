@@ -184,9 +184,9 @@ Organizations, Website, Locations, Relevant Industry
 ```
 
 The career-page source is being ported in layers. The current live layer can
-load a private watchlist, fetch career pages, extract readable text, and compute
-content hashes. The next layer will turn those page snapshots into structured
-jobs.
+load a private watchlist, fetch career pages, extract readable text, compute
+content hashes, and use an LLM provider to extract structured jobs from a page
+snapshot.
 
 ## Privacy
 

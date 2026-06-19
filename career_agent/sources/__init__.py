@@ -16,6 +16,7 @@ from career_agent.sources.opportunities import (
     normalize_legacy_source,
     opportunity_from_dict,
 )
+from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSnapshot, CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
 from career_agent.sources.linkedin_search import LinkedInSearchSource, LinkedInSearchSourceConfig
@@ -43,6 +44,7 @@ __all__ = [
     "CareerPageSource",
     "CareerPageSnapshot",
     "CareerPageSourceConfig",
+    "extract_opportunities_from_snapshot",
     "LinkedInEmailSource",
     "LinkedInEmailSourceConfig",
     "LinkedInSearchSource",
