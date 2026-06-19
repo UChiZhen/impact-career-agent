@@ -180,13 +180,12 @@ def render_job_digest_text(
     source_summary: dict[str, int],
     signals: list[Signal],
 ) -> str:
-    lines = ["Impact Career Agent Digest", "", "Source summary"]
-    lines.extend(f"- {key}: {value}" for key, value in source_summary.items())
-    lines.append("")
+    today = format_digest_date(datetime.now())
+    lines = ["Impact Career Agent Digest", today, ""]
     lines.extend(render_signal_text_section(signals))
     lines.extend(render_text_section("Apply Now", apply_now))
     lines.extend(render_text_section("Review", review))
-    lines.extend(render_text_section("Unscored", unscored))
+    lines.extend(render_text_section("Not Scored Yet", unscored))
     return "\n".join(lines).strip()
 
 
@@ -195,7 +194,7 @@ def render_text_section(title: str, opportunities: list[Opportunity]) -> list[st
         return []
     lines = [f"{title} ({len(opportunities)})"]
     for opportunity in sort_opportunities(opportunities)[:20]:
-        score = f"{opportunity.fit.total}/100" if opportunity.fit else "unscored"
+        score = f"{opportunity.fit.total}/100" if opportunity.fit else "not scored"
         lines.append(f"- [{score}] {opportunity.job_title} @ {opportunity.company}")
         if opportunity.location:
             lines.append(f"  Location: {opportunity.location}")
@@ -214,8 +213,8 @@ def render_signal_text_section(signals: list[Signal]) -> list[str]:
     for signal in signals[:5]:
         score = signal.relevance_score if signal.relevance_score is not None else "unscored"
         confidence = signal.confidence if signal.confidence is not None else "n/a"
-        subtype = signal.signal_subtype or "news"
-        action = signal.suggested_action or "review"
+        subtype = format_signal_subtype(signal.signal_subtype)
+        action = format_signal_action(signal.suggested_action)
         lines.append(f"- [{score}/10, confidence {confidence}] {signal.title}")
         lines.append(f"  Source: {signal.source} | Type: {subtype} | Action: {action}")
         if signal.career_hypothesis:
@@ -226,6 +225,35 @@ def render_signal_text_section(signals: list[Signal]) -> list[str]:
     return lines
 
 
+# Visual theme shared across the HTML digest. Inline styles only, since most
+# email clients strip <style> blocks and ignore flexbox/grid.
+_BRAND = "#0f766e"  # teal header banner
+_BRAND_DARK = "#115e59"
+_INK = "#1f2937"  # primary text
+_MUTED = "#6b7280"  # secondary text
+_PAGE_BG = "#f1f5f9"  # outer page background
+_CARD_BG = "#ffffff"
+_BORDER = "#e5e7eb"
+_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+
+# Per-section accent colors (heading bar + card left border).
+_SECTION_THEME = {
+    "Apply Now": "#16a34a",  # green
+    "Review": "#2563eb",  # blue
+    "Not Scored Yet": "#94a3b8",  # slate
+    "Capital Signals": "#7c3aed",  # purple
+}
+
+_SIGNAL_ACTION_LABELS = {
+    "rescan_org_jobs": "Check careers page",
+    "add_to_watchlist": "Add to watchlist",
+    "search_linkedin": "Search LinkedIn",
+    "review_keywords": "Review search keywords",
+    "ignore": "No action",
+    "review": "Review",
+}
+
+
 def render_job_digest_html(
     apply_now: list[Opportunity],
     review: list[Opportunity],
@@ -233,73 +261,203 @@ def render_job_digest_html(
     source_summary: dict[str, int],
     signals: list[Signal],
 ) -> str:
-    summary_html = "".join(
-        f"<li><strong>{escape(key)}</strong>: {value}</li>" for key, value in source_summary.items()
+    today = format_digest_date(datetime.now())
+    apply_count = len(apply_now)
+    review_count = len(review)
+    headline = (
+        f"{apply_count} to apply now &middot; {review_count} to review"
+        if (apply_count or review_count)
+        else "Your latest impact-career scan"
     )
+    body = "".join(
+        [
+            render_signal_html_section(signals),
+            render_html_section("Apply Now", apply_now),
+            render_html_section("Review", review),
+            render_html_section("Not Scored Yet", unscored),
+        ]
+    )
+    if not body:
+        body = (
+            f'<p style="margin:24px 0;color:{_MUTED};font-size:15px;">'
+            "No new opportunities or signals in this scan. We&rsquo;ll keep watching.</p>"
+        )
     return f"""<!doctype html>
 <html>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;">
-    <h1>Impact Career Agent Digest</h1>
-    <h2>Source Summary</h2>
-    <ul>{summary_html}</ul>
-    {render_signal_html_section(signals)}
-    {render_html_section("Apply Now", apply_now)}
-    {render_html_section("Review", review)}
-    {render_html_section("Unscored", unscored)}
+  <body style="margin:0;padding:0;background:{_PAGE_BG};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{_PAGE_BG};">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:{_CARD_BG};border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.08);font-family:{_FONT};">
+            <tr>
+              <td style="background:{_BRAND};background-image:linear-gradient(135deg,{_BRAND} 0%,{_BRAND_DARK} 100%);padding:28px 32px;">
+                <div style="color:#d1fae5;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Impact Career Agent</div>
+                <div style="color:#ffffff;font-size:22px;font-weight:700;margin-top:6px;">{headline}</div>
+                <div style="color:#a7f3d0;font-size:13px;margin-top:6px;">{escape(today)}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 32px 12px 32px;color:{_INK};">
+                {body}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px 28px 32px;border-top:1px solid {_BORDER};">
+                <div style="color:{_MUTED};font-size:12px;line-height:1.6;">
+                  Curated by your Impact Career Agent. Scores are directional guidance, not gospel &mdash; trust your own read.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>"""
+
+
+def render_section_heading(title: str, count: int) -> str:
+    accent = _SECTION_THEME.get(title, _BRAND)
+    return (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="margin:18px 0 10px 0;"><tr>'
+        f'<td style="font-size:15px;font-weight:700;color:{_INK};">'
+        f'<span style="display:inline-block;width:10px;height:10px;border-radius:3px;'
+        f'background:{accent};margin-right:8px;"></span>{escape(title)}</td>'
+        f'<td align="right"><span style="display:inline-block;background:{accent};color:#ffffff;'
+        f'font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;">{count}</span></td>'
+        "</tr></table>"
+    )
 
 
 def render_html_section(title: str, opportunities: list[Opportunity]) -> str:
     if not opportunities:
         return ""
-    cards = "".join(render_html_card(opportunity) for opportunity in sort_opportunities(opportunities)[:20])
-    return f"<h2>{escape(title)} ({len(opportunities)})</h2>{cards}"
+    accent = _SECTION_THEME.get(title, _BRAND)
+    cards = "".join(
+        render_html_card(opportunity, accent)
+        for opportunity in sort_opportunities(opportunities)[:20]
+    )
+    return render_section_heading(title, len(opportunities)) + cards
 
 
 def render_signal_html_section(signals: list[Signal]) -> str:
     if not signals:
         return ""
-    cards = "".join(render_signal_html_card(signal) for signal in signals[:5])
-    return f"<h2>Capital Signals ({len(signals)})</h2>{cards}"
+    accent = _SECTION_THEME["Capital Signals"]
+    cards = "".join(render_signal_html_card(signal, accent) for signal in signals[:5])
+    return render_section_heading("Capital Signals", len(signals)) + cards
 
 
-def render_signal_html_card(signal: Signal) -> str:
-    score = signal.relevance_score if signal.relevance_score is not None else "unscored"
-    confidence = signal.confidence if signal.confidence is not None else "n/a"
-    subtype = signal.signal_subtype or "news"
-    action = signal.suggested_action or "review"
+def format_digest_date(value: datetime) -> str:
+    """Format digest dates without platform-specific strftime directives."""
+    return f"{value.strftime('%A, %B')} {value.day}, {value.year}"
+
+
+def format_signal_subtype(value: str | None) -> str:
+    """Convert internal signal subtypes into reader-facing labels."""
+    if not value:
+        return "News"
+    return value.replace("_", " ").title()
+
+
+def format_signal_action(value: str | None) -> str:
+    """Convert internal workflow actions into reader-facing labels."""
+    normalized = (value or "review").strip().lower()
+    return _SIGNAL_ACTION_LABELS.get(normalized, normalized.replace("_", " ").title())
+
+
+def _score_pill(label: str, value: int | None, scale: int) -> str:
+    """Colored badge whose color reflects the score band."""
+    if value is None:
+        bg, fg = "#f1f5f9", _MUTED
+        text = label
+    else:
+        ratio = value / scale
+        if ratio >= 0.8:
+            bg, fg = "#dcfce7", "#166534"
+        elif ratio >= 0.6:
+            bg, fg = "#fef3c7", "#92400e"
+        else:
+            bg, fg = "#f1f5f9", "#475569"
+        text = f"{value}/{scale}"
+    return (
+        f'<span style="display:inline-block;background:{bg};color:{fg};font-size:12px;'
+        f'font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;">{escape(text)}</span>'
+    )
+
+
+def _card_shell(accent: str, inner: str) -> str:
+    return (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        f'style="margin:0 0 10px 0;background:{_CARD_BG};border:1px solid {_BORDER};'
+        f'border-left:4px solid {accent};border-radius:8px;">'
+        f'<tr><td style="padding:14px 16px;">{inner}</td></tr></table>'
+    )
+
+
+def render_html_card(opportunity: Opportunity, accent: str) -> str:
+    fit = opportunity.fit
+    pill = _score_pill("not scored", fit.total if fit else None, 100)
+    title_text = escape(opportunity.job_title)
+    link = (
+        f'<a href="{escape(opportunity.job_url)}" style="color:{_BRAND_DARK};text-decoration:none;">{title_text}</a>'
+        if opportunity.job_url
+        else title_text
+    )
+    meta_parts = [escape(opportunity.company)]
+    if opportunity.location:
+        meta_parts.append(escape(opportunity.location))
+    meta = " &middot; ".join(meta_parts)
+    summary = fit.match_summary if fit else ""
+    summary_html = (
+        f'<div style="margin-top:8px;font-size:14px;line-height:1.5;color:{_INK};">{escape(summary)}</div>'
+        if summary
+        else ""
+    )
+    inner = (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+        f'<td style="font-size:15px;font-weight:700;color:{_INK};">{link}</td>'
+        f'<td align="right" style="vertical-align:top;padding-left:8px;">{pill}</td>'
+        "</tr></table>"
+        f'<div style="margin-top:3px;font-size:13px;color:{_MUTED};">{meta}</div>'
+        f"{summary_html}"
+    )
+    return _card_shell(accent, inner)
+
+
+def render_signal_html_card(signal: Signal, accent: str) -> str:
+    pill = _score_pill("not scored", signal.relevance_score, 10)
+    subtype = format_signal_subtype(signal.signal_subtype)
+    action = format_signal_action(signal.suggested_action)
+    title_text = escape(signal.title)
     title = (
-        f'<a href="{escape(signal.url)}">{escape(signal.title)}</a>'
+        f'<a href="{escape(signal.url)}" style="color:{_BRAND_DARK};text-decoration:none;">{title_text}</a>'
         if signal.url
-        else escape(signal.title)
+        else title_text
     )
     hypothesis = signal.career_hypothesis or ""
-    return f"""
-    <div style="border:1px solid #ddd;border-radius:6px;padding:12px;margin:10px 0;">
-      <div style="font-weight:600;">{title}</div>
-      <div>{escape(signal.source)} | {escape(subtype)} | {escape(str(score))}/10 | confidence {escape(str(confidence))}</div>
-      <div>Suggested action: {escape(action)}</div>
-      <p>{escape(hypothesis)}</p>
-    </div>
-    """
-
-
-def render_html_card(opportunity: Opportunity) -> str:
-    score = f"{opportunity.fit.total}/100" if opportunity.fit else "unscored"
-    summary = opportunity.fit.match_summary if opportunity.fit else ""
-    link = (
-        f'<a href="{escape(opportunity.job_url)}">{escape(opportunity.job_title)}</a>'
-        if opportunity.job_url
-        else escape(opportunity.job_title)
+    hypothesis_html = (
+        f'<div style="margin-top:8px;font-size:14px;line-height:1.5;color:{_INK};">{escape(hypothesis)}</div>'
+        if hypothesis
+        else ""
     )
-    return f"""
-    <div style="border:1px solid #ddd;border-radius:6px;padding:12px;margin:10px 0;">
-      <div style="font-weight:600;">{link}</div>
-      <div>{escape(opportunity.company)} | {escape(opportunity.location)} | {escape(score)}</div>
-      <p>{escape(summary)}</p>
-    </div>
-    """
+    tag = (
+        f'<span style="display:inline-block;background:#f3e8ff;color:#6b21a8;font-size:11px;'
+        f'font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase;'
+        f'letter-spacing:0.3px;">{escape(subtype)}</span>'
+    )
+    inner = (
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+        f'<td style="font-size:15px;font-weight:700;color:{_INK};">{title}</td>'
+        f'<td align="right" style="vertical-align:top;padding-left:8px;">{pill}</td>'
+        "</tr></table>"
+        f'<div style="margin-top:6px;">{tag}'
+        f'<span style="font-size:13px;color:{_MUTED};margin-left:8px;">{escape(signal.source)} '
+        f'&middot; Next: {escape(action)}</span></div>'
+        f"{hypothesis_html}"
+    )
+    return _card_shell(accent, inner)
 
 
 def by_action(opportunities: list[Opportunity], action: str) -> list[Opportunity]:

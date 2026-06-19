@@ -21,9 +21,12 @@ def test_render_job_digest_groups_by_action():
 
     assert "Apply Now (1)" in digest["text"]
     assert "Review (1)" in digest["text"]
-    assert "Unscored (1)" in digest["text"]
-    assert "Impact Career Agent Digest" in digest["html"]
-    assert "deduped_total" in digest["html"]
+    assert "Not Scored Yet (1)" in digest["text"]
+    assert "Impact Career Agent" in digest["html"]
+    # Internal source diagnostics should not leak into the reader-facing digest.
+    assert "deduped_total" not in digest["html"]
+    assert "Source Summary" not in digest["html"]
+    assert "Impact Analyst" in digest["html"]
 
 
 def test_render_job_digest_can_include_capital_signals_before_jobs():
@@ -51,8 +54,11 @@ def test_render_job_digest_can_include_capital_signals_before_jobs():
     assert "Example fund closes new vehicle" in digest["text"]
     assert "https://example.org/signal" in digest["text"]
     assert digest["text"].index("Capital Signals") < digest["text"].index("Apply Now")
-    assert "Capital Signals (1)" in digest["html"]
+    assert "Capital Signals" in digest["html"]
     assert "Fresh capital may create investment-team hiring." in digest["html"]
+    assert "rescan_org_jobs" not in digest["html"]
+    assert "Check careers page" in digest["html"]
+    assert "Fund Close" in digest["html"]
     assert digest["html"].index("Capital Signals") < digest["html"].index("Apply Now")
 
 
