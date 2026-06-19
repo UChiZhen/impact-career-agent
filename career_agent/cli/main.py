@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
 from career_agent import __version__
-from career_agent.demo import DEFAULT_CONFIG_PATH, load_demo_config, load_demo_opportunities, run_demo
-from career_agent.llm import GeminiProvider
+from career_agent.demo import (
+    DEFAULT_CONFIG_PATH,
+    load_candidate_profile,
+    load_demo_config,
+    load_demo_opportunities,
+    run_demo,
+)
+from career_agent.llm import GeminiProvider, MockLLMProvider
+from career_agent.scoring.job_fit import score_opportunities
 from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
@@ -203,6 +211,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print opportunity company/title/location rows.",
     )
     jobs_parser.add_argument(
+        "--score",
+        action="store_true",
+        help="Score scanned opportunities against a candidate profile.",
+    )
+    jobs_parser.add_argument(
+        "--score-provider",
+        choices=("mock", "gemini"),
+        default="mock",
+        help="Provider to use when --score is enabled.",
+    )
+    jobs_parser.add_argument(
+        "--candidate-profile",
+        default="examples/sample_data/candidate_profile.yaml",
+        help="Candidate profile YAML used for scoring.",
+    )
+    jobs_parser.add_argument(
         "--limit",
         type=int,
         default=10,
@@ -394,6 +418,12 @@ def run_job_scan(args: argparse.Namespace) -> str:
             source_summary["career_page"] = len(career_opportunities)
 
     deduped = dedupe_opportunities(opportunities)
+    if args.score:
+        candidate = load_candidate_profile(Path(args.candidate_profile))
+        provider = scoring_provider_from_args(args, deduped)
+        deduped = score_opportunities(deduped, candidate, provider)
+        source_summary.update(score_summary(deduped))
+
     source_summary["deduped_total"] = len(deduped)
     return format_job_scan_summary(
         source_summary=source_summary,
@@ -401,6 +431,58 @@ def run_job_scan(args: argparse.Namespace) -> str:
         show_details=args.show_details,
         limit=args.limit,
     )
+
+
+def scoring_provider_from_args(args: argparse.Namespace, opportunities):
+    """Build the selected scoring provider."""
+    if args.score_provider == "gemini":
+        return GeminiProvider()
+    return MockLLMProvider(default_response=mock_score_response(opportunities))
+
+
+def mock_score_response(opportunities) -> str:
+    """Return a deterministic scoring payload for local CLI tests and demos."""
+    payload = []
+    for opportunity in opportunities:
+        combined = " ".join(
+            [
+                opportunity.job_title,
+                opportunity.company,
+                opportunity.location,
+                opportunity.description,
+            ]
+        ).lower()
+        total = 82 if "impact" in combined else 58
+        action = "apply_now" if total >= 80 else "skip"
+        payload.append(
+            {
+                "job_url": opportunity.job_url,
+                "company": opportunity.company,
+                "job_title": opportunity.job_title,
+                "total": total,
+                "recommended_action": action,
+                "skills_match": 15,
+                "experience_relevance": 18,
+                "geography_match": 10,
+                "org_type_match": 10,
+                "level_match": 7,
+                "background_fit": 8,
+                "match_summary": "Local mock score for CLI workflow validation.",
+                "top_reasons": ["Deterministic mock scoring path."],
+                "risks": [],
+                "resume_angle": "Use the role description to tailor relevant experience.",
+            }
+        )
+    return json.dumps(payload)
+
+
+def score_summary(opportunities) -> dict[str, int]:
+    """Count recommended actions from scored opportunities."""
+    counts = {"apply_now": 0, "review": 0, "skip": 0}
+    for opportunity in opportunities:
+        if opportunity.fit:
+            counts[opportunity.fit.recommended_action] += 1
+    return {f"score_{key}": value for key, value in counts.items()}
 
 
 def fetch_linkedin_email_opportunities_for_job_scan(args: argparse.Namespace):
@@ -476,9 +558,10 @@ def format_job_scan_summary(
         lines.append("")
         lines.append("Top opportunities")
         for opportunity in opportunities[:limit]:
+            action = f" | {opportunity.fit.recommended_action}" if opportunity.fit else ""
             lines.append(
                 f" - {opportunity.source}: {opportunity.company} | "
-                f"{opportunity.job_title} | {opportunity.location}"
+                f"{opportunity.job_title} | {opportunity.location}{action}"
             )
     elif not show_details and opportunities:
         lines.append("")

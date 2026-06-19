@@ -89,6 +89,18 @@ career-agent scan-jobs \
 By default, `scan-jobs` prints counts only. Use `--show-details` when you
 explicitly want company/title/location rows in the terminal.
 
+Add `--score` to score all deduplicated opportunities. The default scoring
+provider is a deterministic local mock for safe demos and tests. Use Gemini
+explicitly for live scoring during development:
+
+```bash
+career-agent scan-jobs \
+  --env-file /path/to/private/.env \
+  --score \
+  --score-provider gemini \
+  --show-details
+```
+
 The live LinkedIn email source preserves the working Gmail flow from the
 original `linkedin_email` project:
 

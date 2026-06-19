@@ -9,6 +9,7 @@ from career_agent.cli.main import (
     linkedin_search_config_from_args,
     load_env_file,
     main,
+    mock_score_response,
 )
 from career_agent.core import Opportunity
 
@@ -168,6 +169,28 @@ def test_scan_jobs_default_uses_fixture_sources():
     assert "Details hidden" in text
 
 
+def test_scan_jobs_can_score_with_mock_provider():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--score",
+                "--show-details",
+                "--limit",
+                "2",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "score_apply_now:" in text
+    assert "score_skip:" in text
+    assert "| apply_now" in text or "| skip" in text
+
+
 def test_scan_jobs_live_command_uses_safe_summary(monkeypatch):
     monkeypatch.setattr(
         "career_agent.cli.main.fetch_linkedin_email_opportunities_for_job_scan",
@@ -209,3 +232,24 @@ def test_format_job_scan_summary_hides_details_by_default():
 
     assert "Private Org" not in summary
     assert "Details hidden" in summary
+
+
+def test_mock_score_response_matches_opportunity_count():
+    opportunities = [
+        Opportunity(
+            source="career_page",
+            company="Example Impact Fund",
+            job_title="Impact Analyst",
+            location="Chicago",
+        ),
+        Opportunity(
+            source="linkedin_search",
+            company="Example Bank",
+            job_title="Operations Analyst",
+            location="New York",
+        ),
+    ]
+
+    payload = mock_score_response(opportunities)
+
+    assert payload.count("recommended_action") == 2
