@@ -19,6 +19,11 @@ from career_agent.sources.opportunities import (
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
 from career_agent.sources.linkedin_search import LinkedInSearchSource, LinkedInSearchSourceConfig
+from career_agent.sources.watchlist import (
+    GoogleSheetsOrganizationSource,
+    GoogleSheetsWatchlistConfig,
+    organizations_from_sheet_values,
+)
 
 __all__ = [
     "LINKEDIN_ALERT_SENDER",
@@ -41,4 +46,7 @@ __all__ = [
     "LinkedInEmailSourceConfig",
     "LinkedInSearchSource",
     "LinkedInSearchSourceConfig",
+    "GoogleSheetsOrganizationSource",
+    "GoogleSheetsWatchlistConfig",
+    "organizations_from_sheet_values",
 ]

@@ -165,6 +165,24 @@ v0.1 normalizes three working discovery paths into one `Opportunity` pipeline:
 The downstream scorer, digest, and resume-tailoring stages consume the same
 `Opportunity` model regardless of source.
 
+These sources are designed as a maturity ladder, not mutually exclusive user
+types:
+
+- Users with a private organization watchlist can scan those career pages, use
+  LinkedIn alerts, and run Apify keyword search.
+- Users with LinkedIn job alerts but no watchlist can combine Gmail alerts with
+  Apify keyword search.
+- Users starting from scratch can begin with Apify keyword/location search and
+  build a watchlist over time.
+
+Private watchlists should stay private. Public fixtures use fictional
+organizations only. Users who want the career-page source can provide either a
+local YAML/JSON watchlist or a private Google Sheet with the Job Radar columns:
+
+```text
+Organizations, Website, Locations, Relevant Industry
+```
+
 ## Privacy
 
 The project is designed around local-first operation. Credentials, OAuth tokens,
