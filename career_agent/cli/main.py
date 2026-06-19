@@ -650,6 +650,9 @@ def format_news_scan_summary(
     elif not show_details and signals:
         lines.append("")
         lines.append("Details hidden. Use --show-details to print signal titles.")
+    elif not signals and health_results:
+        lines.append("")
+        lines.append("Health check complete. Add --rss-live to fetch RSS signals.")
     elif not signals:
         lines.append("")
         lines.append(

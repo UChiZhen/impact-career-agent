@@ -112,30 +112,45 @@ career-agent scan-jobs \
 ```
 
 News signals from `daily_news` are being migrated as a career-oriented capital
-signal engine. The default source pack uses public, high-signal sources and
-keeps premium newsletters behind user-provided access:
+signal engine. The default source pack is usable without API keys for public
+RSS signals, and premium newsletters stay behind user-provided access:
 
 ```bash
 career-agent scan-news
 ```
 
 The default mode is local-only and prints the configured source counts without
-calling the network. Fetch public RSS feeds only when explicitly requested:
+calling the network. Normal users can fetch the default free RSS sources with
+no configuration:
 
 ```bash
 career-agent scan-news --rss-live
 ```
 
-Check all public source-pack URLs before relying on them:
+`--health-check` is optional. It is mainly for maintainers, CI, or users who
+want to diagnose whether every source-pack URL is reachable from their network:
 
 ```bash
 career-agent scan-news --health-check \
   --user-agent 'ImpactCareerAgent/0.1 contact: you@example.com'
 ```
 
-RSS sources are fetched and parsed. Web and regulatory sources are checked for
-connectivity only. Some SEC pages require a User-Agent with contact
-information; this can also be provided with `IMPACT_CAREER_USER_AGENT`.
+During health checks, RSS sources are fetched and parsed. Web and regulatory
+sources are checked for connectivity only; v0.1 does not scrape those pages by
+default. Some SEC pages require a User-Agent with contact information; this can
+also be provided with `IMPACT_CAREER_USER_AGENT`.
+
+The default public source pack currently has three tiers:
+
+```text
+active RSS sources: ImpactAlpha, NextBillion
+connectivity-checked web sources: GIIN, ImpactAssets IA 50, Convergence, DFC, IFC, CTVC
+connectivity-checked regulatory sources: SEC Form D, SEC EDGAR APIs
+```
+
+Only the active RSS sources are used by `--rss-live` today. The web and
+regulatory entries are public-source metadata and health-checked extension
+points until dedicated parsers are added.
 
 ImpactAlpha newsletter parsing is supported through a local `.eml` sample for
 development smoke tests or through Gmail for users with their own subscription:

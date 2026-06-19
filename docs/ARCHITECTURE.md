@@ -143,11 +143,22 @@ Default public sources are configured through:
 examples/source_packs/impact_capital_signals.yaml
 ```
 
+The v0.1 source pack separates active sources from extension points:
+
+- active RSS sources are available to normal users through `scan-news --rss-live`
+  with no API keys.
+- web sources are public metadata entries and health-check targets until a
+  dedicated parser exists.
+- regulatory sources are public metadata entries and health-check targets until
+  SEC/EDGAR parsing is added. SEC requests may require a User-Agent with contact
+  information.
+
 The current implementation includes:
 
 - `RSSNewsSource`: public RSS/Atom feed parsing into `Signal` objects.
-- `check_source_pack_health`: source-pack health checks. RSS feeds are fetched
-  and parsed; web and regulatory entries are connectivity checks.
+- `check_source_pack_health`: optional maintainer/developer diagnostics. RSS
+  feeds are fetched and parsed; web and regulatory entries are connectivity
+  checks.
 - `ImpactAlphaNewsletterSource`: optional Gmail connector for a user's own
   ImpactAlpha subscription.
 - `parse_impactalpha_newsletter_eml`: local `.eml` parser for development
