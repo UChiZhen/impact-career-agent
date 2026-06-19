@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from career_agent import __version__
-from career_agent.applications import generate_application_packet
+from career_agent.applications import LocalApplicationPacketSink, generate_application_packet
 from career_agent.core import FitScore, Opportunity
 from career_agent.demo import (
     DEFAULT_CONFIG_PATH,
@@ -119,6 +119,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-json",
         action="store_true",
         help="Print generated document JSON contents.",
+    )
+    application_parser.add_argument(
+        "--output",
+        choices=("preview", "local"),
+        default="preview",
+        help="Where to save application materials. Preview prints a summary only.",
+    )
+    application_parser.add_argument(
+        "--output-dir",
+        default="application_packets",
+        help="Local root folder for rendered application packets.",
+    )
+    application_parser.add_argument(
+        "--render-pdf",
+        action="store_true",
+        help="Also render PDF files when saving locally. Requires LibreOffice.",
+    )
+    application_parser.add_argument(
+        "--debug-output",
+        action="store_true",
+        help="Save local JSON and audit debug files next to rendered documents.",
     )
 
     email_parser = subparsers.add_parser(
@@ -533,7 +554,18 @@ def run_application_draft(args: argparse.Namespace) -> str:
     )
     provider = application_provider_from_args(args, opportunity, candidate)
     packet = generate_application_packet(opportunity, candidate, provider)
-    return format_application_packet_summary(packet, show_json=args.show_json)
+    output_result = None
+    if args.output == "local":
+        output_result = LocalApplicationPacketSink(
+            root_dir=Path(args.output_dir),
+            render_pdf=args.render_pdf,
+            debug_output=args.debug_output,
+        ).save(packet, candidate)
+    return format_application_packet_summary(
+        packet,
+        show_json=args.show_json,
+        output_result=output_result,
+    )
 
 
 def load_master_resume(path: Path) -> dict:
@@ -643,7 +675,7 @@ def mock_cover_letter_payload(opportunity: Opportunity, candidate) -> dict:
     }
 
 
-def format_application_packet_summary(packet, *, show_json: bool) -> str:
+def format_application_packet_summary(packet, *, show_json: bool, output_result=None) -> str:
     """Format an application packet preview."""
     lines = [
         "Application packet draft",
@@ -654,6 +686,15 @@ def format_application_packet_summary(packet, *, show_json: bool) -> str:
     ]
     for document in packet.documents:
         lines.append(f" - {document.document_type}: {document.format}")
+    if output_result:
+        lines.append(f"Output folder: {output_result.folder}")
+        lines.append("Rendered files")
+        for path in output_result.files:
+            lines.append(f" - {path.name}")
+        if output_result.warnings:
+            lines.append("Output warnings")
+            for warning in output_result.warnings:
+                lines.append(f" - {warning}")
     if packet.audit_notes:
         lines.append("Audit notes")
         lines.extend(f" - {note}" for note in packet.audit_notes)

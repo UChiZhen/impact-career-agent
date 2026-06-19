@@ -228,6 +228,7 @@ templates, and generated files stay out of the public v0.1 fixtures.
 Application material storage should stay pluggable:
 
 - local filesystem / structured JSON preview as the v0.1 default.
+- local DOCX packet rendering for user-facing resume and cover-letter files.
 - optional Google Drive output folders for users who want cloud persistence.
 - optional Google Sheet write-back for status tracking and packet links.
 - optional email attachments or links after the user explicitly enables a mail
@@ -235,6 +236,13 @@ Application material storage should stay pluggable:
 
 This avoids requiring Google authentication during onboarding while still
 leaving a clear path for always-on hosted workflows.
+
+Local packet rendering treats DOCX as the stable default artifact. PDF rendering
+is opt-in because it depends on LibreOffice and may vary across user machines or
+sandboxes. If PDF conversion fails, the sink should keep the DOCX files and
+record the conversion warning in `manifest.json` rather than failing the entire
+application packet. Hosted/cloud deployments can make PDF generation reliable by
+pinning LibreOffice in the runtime image.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local

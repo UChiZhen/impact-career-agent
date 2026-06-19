@@ -3,6 +3,7 @@ import json
 import pytest
 
 from career_agent.applications import (
+    LocalApplicationPacketSink,
     build_cover_letter_prompt,
     build_resume_tailoring_prompt,
     generate_application_packet,
@@ -10,6 +11,11 @@ from career_agent.applications import (
     normalize_tailored_resume,
     tailor_resume_content,
     write_cover_letter_content,
+)
+from career_agent.applications.packet_outputs import (
+    compact_filename,
+    packet_folder_name,
+    packet_manifest,
 )
 from career_agent.core import CandidateProfile, FitScore, Opportunity
 from career_agent.llm import LLMProviderError, LLMResponse
@@ -192,3 +198,93 @@ def test_generate_application_packet_returns_resume_and_cover_letter_documents()
     assert packet.documents[0].format == "json"
     assert "Selected finance-forward experience." in packet.audit_notes
     assert "Aligned letter to tailored resume." in packet.audit_notes
+
+
+def test_packet_output_names_are_readable_and_stable():
+    provider = SequenceProvider(
+        [
+            json.dumps(tailored_resume_payload()),
+            json.dumps(cover_letter_payload()),
+        ]
+    )
+    packet = generate_application_packet(demo_opportunity(), demo_candidate(), provider)
+
+    folder_name = packet_folder_name(packet)
+
+    assert folder_name.startswith(packet.created_at.date().isoformat())
+    assert "example-impact-fund" in folder_name
+    assert "impact-investment-analyst" in folder_name
+    assert compact_filename("Resume - Example/Org - Role?") == "Resume - ExampleOrg - Role"
+
+
+def test_packet_manifest_keeps_only_lightweight_metadata():
+    provider = SequenceProvider(
+        [
+            json.dumps(tailored_resume_payload()),
+            json.dumps(cover_letter_payload()),
+        ]
+    )
+    packet = generate_application_packet(demo_opportunity(), demo_candidate(), provider)
+
+    manifest = packet_manifest(packet, [])
+
+    assert manifest["opportunity"]["company"] == "Example Impact Fund"
+    assert manifest["fit"]["total"] == 88
+    assert "documents" not in manifest
+
+
+def test_local_packet_sink_writes_rendered_documents_without_debug_files(tmp_path):
+    pytest.importorskip("docx")
+    provider = SequenceProvider(
+        [
+            json.dumps(tailored_resume_payload()),
+            json.dumps(cover_letter_payload()),
+        ]
+    )
+    packet = generate_application_packet(demo_opportunity(), demo_candidate(), provider)
+    candidate = demo_candidate()
+
+    result = LocalApplicationPacketSink(
+        root_dir=tmp_path,
+        render_pdf=False,
+        debug_output=False,
+    ).save(packet, candidate)
+
+    names = {path.name for path in result.files}
+    assert any(name.startswith("Resume - Example Impact Fund") for name in names)
+    assert any(name.startswith("Cover Letter - Example Impact Fund") for name in names)
+    assert "manifest.json" in names
+    assert "resume.json" not in names
+    assert "cover_letter.json" not in names
+    assert "audit_notes.txt" not in names
+    assert not any(name.endswith(".pdf") for name in names)
+
+
+def test_local_packet_sink_records_pdf_failures_without_aborting(tmp_path, monkeypatch):
+    pytest.importorskip("docx")
+    provider = SequenceProvider(
+        [
+            json.dumps(tailored_resume_payload()),
+            json.dumps(cover_letter_payload()),
+        ]
+    )
+    packet = generate_application_packet(demo_opportunity(), demo_candidate(), provider)
+
+    def fail_pdf(docx_path, output_dir=None):
+        raise RuntimeError("LibreOffice unavailable")
+
+    monkeypatch.setattr("career_agent.applications.packet_outputs.docx_to_pdf", fail_pdf)
+
+    result = LocalApplicationPacketSink(
+        root_dir=tmp_path,
+        render_pdf=True,
+        debug_output=False,
+    ).save(packet, demo_candidate())
+
+    names = {path.name for path in result.files}
+    assert "manifest.json" in names
+    assert any(name.endswith(".docx") for name in names)
+    assert not any(name.endswith(".pdf") for name in names)
+    assert result.warnings
+    manifest = json.loads((result.folder / "manifest.json").read_text(encoding="utf-8"))
+    assert "LibreOffice unavailable" in manifest["warnings"][0]

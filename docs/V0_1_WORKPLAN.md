@@ -170,10 +170,15 @@ Implemented:
 - added mock-provider tests with no private resume content or API calls
 - documented local-first application material storage, with Google Drive,
   Google Sheet write-back, and email delivery as future opt-in sinks
+- ported DOCX resume and cover-letter rendering from `auto_resume`
+- added local application packet folders with DOCX files and lightweight
+  manifests; debug JSON/TXT files are opt-in only
+- made PDF rendering optional through LibreOffice, with graceful fallback when
+  local conversion fails
 
 Next:
 
-- port DOCX resume and cover-letter renderers
+- add Google Drive application packet sink under `Impact Career Agent`
 - keep real master resumes, generated DOCX/PDF/PNG, and templates out of git
 
 ### Step 6a: Capital signal discovery

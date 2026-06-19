@@ -38,6 +38,9 @@ career-pages = [
   "trafilatura>=1.8",
 ]
 docs = []
+documents = [
+  "python-docx>=1.1",
+]
 
 [project.scripts]
 career-agent = "career_agent.cli.main:main"

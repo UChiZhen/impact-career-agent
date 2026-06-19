@@ -165,6 +165,25 @@ career-agent draft-application
 career-agent draft-application --show-json
 ```
 
+Render local application files when you want user-facing documents:
+
+```bash
+pip install "impact-career-agent[documents]"
+career-agent draft-application --output local
+```
+
+The local default writes DOCX files plus `manifest.json`. Debug JSON/TXT files
+are saved only with `--debug-output`. PDF rendering is optional because it
+requires a working LibreOffice installation:
+
+```bash
+career-agent draft-application --output local --render-pdf
+```
+
+If local PDF conversion fails, the DOCX files are still saved and the warning is
+recorded in the manifest. Hosted/cloud deployments should install LibreOffice
+and can treat PDF rendering as part of their managed runtime.
+
 Use Gemini explicitly when you want a live LLM draft:
 
 ```bash
