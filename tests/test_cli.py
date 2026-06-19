@@ -182,6 +182,67 @@ def test_scan_news_default_is_safe_source_pack_dry_run():
     assert "No live sources selected" in text
 
 
+def test_scan_news_loads_env_file_for_live_news_settings(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("IMPACTALPHA_NEWSLETTER_SENDER=newsletter@example.com\n")
+
+    class FakeSource:
+        def __init__(self, config):
+            assert config.sender == "newsletter@example.com"
+
+        def fetch(self):
+            return []
+
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_PATH", "~/credentials.json")
+    monkeypatch.setenv("GOOGLE_TOKEN_PATH", "~/token.json")
+    monkeypatch.setattr("career_agent.cli.main.ImpactAlphaNewsletterSource", FakeSource)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-news",
+                "--env-file",
+                str(env_path),
+                "--impactalpha-email-live",
+            ]
+        )
+
+    assert exit_code == 0
+    assert "impactalpha_email: 0" in output.getvalue()
+
+
+def test_scan_news_cli_query_override_for_impactalpha(monkeypatch):
+    captured = {}
+
+    class FakeSource:
+        def __init__(self, config):
+            captured["query"] = config.gmail_query("2026/06/18")
+
+        def fetch(self):
+            return []
+
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_PATH", "~/credentials.json")
+    monkeypatch.setenv("GOOGLE_TOKEN_PATH", "~/token.json")
+    monkeypatch.setattr("career_agent.cli.main.ImpactAlphaNewsletterSource", FakeSource)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-news",
+                "--impactalpha-email-live",
+                "--impactalpha-sender",
+                "newsletter@example.com",
+                "--impactalpha-query",
+                "from:{sender} after:{after_date}",
+            ]
+        )
+
+    assert exit_code == 0
+    assert captured["query"] == "from:newsletter@example.com after:2026/06/18"
+
+
 def test_format_news_scan_summary_hides_titles_by_default():
     from career_agent.core import Signal
 

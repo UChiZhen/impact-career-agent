@@ -155,6 +155,10 @@ Premium sources such as PitchBook, private newsletters, or paid datasets should
 be integrated through user-owned API/export/newsletter access. The default OSS
 configuration should not scrape paywalled content.
 
+The ImpactAlpha Gmail source supports configurable sender and query templates
+so forwarded newsletters and user-created Gmail labels can be handled without a
+code change. Query templates may use `{sender}` and `{after_date}` placeholders.
+
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local
 credentials.

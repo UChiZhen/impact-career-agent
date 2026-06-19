@@ -153,6 +153,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a public news source-pack YAML file.",
     )
     news_parser.add_argument(
+        "--env-file",
+        help="Optional .env file to load before reading private settings.",
+    )
+    news_parser.add_argument(
         "--rss-live",
         action="store_true",
         help="Fetch live public RSS feeds from the source pack.",
@@ -165,6 +169,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--impactalpha-email-live",
         action="store_true",
         help="Fetch ImpactAlpha newsletter emails through Gmail.",
+    )
+    news_parser.add_argument(
+        "--impactalpha-sender",
+        help="Gmail sender to query for ImpactAlpha newsletters.",
+    )
+    news_parser.add_argument(
+        "--impactalpha-query",
+        help=(
+            "Full Gmail query override. Supports {after_date} and {sender} placeholders."
+        ),
     )
     news_parser.add_argument("--credentials-path", help="Path to Google OAuth credentials JSON.")
     news_parser.add_argument("--token-path", help="Path to Google OAuth token JSON.")
@@ -453,6 +467,9 @@ def linkedin_search_config_from_args(
 
 def run_news_scan(args: argparse.Namespace) -> str:
     """Scan capital-signal news sources and return a privacy-conscious summary."""
+    if args.env_file:
+        load_env_file(Path(args.env_file))
+
     source_pack = load_news_source_pack(Path(args.source_pack))
     signals = []
     source_summary: dict[str, int] = {
@@ -473,7 +490,10 @@ def run_news_scan(args: argparse.Namespace) -> str:
         source_summary["impactalpha_eml"] = len(impactalpha_signals)
 
     if args.impactalpha_email_live:
+        env_config = ImpactAlphaNewsletterConfig.from_env()
         config = ImpactAlphaNewsletterConfig(
+            sender=args.impactalpha_sender or env_config.sender,
+            query=args.impactalpha_query or env_config.query,
             credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
             token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
             hours_back=args.hours_back,

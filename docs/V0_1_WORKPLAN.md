@@ -168,6 +168,7 @@ Implemented:
   climate finance, and community finance
 - RSS/Atom parsing into `Signal` objects
 - ImpactAlpha `.eml` and Gmail payload parsing for user-owned newsletter access
+- configurable ImpactAlpha sender/query overrides for forwarded newsletters
 - deterministic signal classification for fund launches, fund closes,
   LP commitments, transactions, programs, and macro tailwinds
 - `career-agent scan-news` with safe default output

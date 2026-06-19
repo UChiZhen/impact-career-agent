@@ -85,6 +85,7 @@ class ImpactAlphaNewsletterConfig:
     """Configuration for ImpactAlpha newsletter emails in Gmail."""
 
     sender: str = IMPACTALPHA_SENDER
+    query: str | None = None
     hours_back: int = 26
     max_results: int = 10
     credentials_path: str | None = None
@@ -95,6 +96,7 @@ class ImpactAlphaNewsletterConfig:
         """Build config from local environment variables."""
         return cls(
             sender=os.getenv("IMPACTALPHA_NEWSLETTER_SENDER", IMPACTALPHA_SENDER),
+            query=os.getenv("IMPACTALPHA_NEWSLETTER_QUERY"),
             hours_back=int(os.getenv("IMPACTALPHA_NEWSLETTER_HOURS_BACK", "26")),
             max_results=int(os.getenv("IMPACTALPHA_NEWSLETTER_MAX_RESULTS", "10")),
             credentials_path=os.getenv("GOOGLE_CREDENTIALS_PATH"),
@@ -103,6 +105,8 @@ class ImpactAlphaNewsletterConfig:
 
     def gmail_query(self, after_date: str) -> str:
         """Build the Gmail query for ImpactAlpha newsletters."""
+        if self.query:
+            return self.query.format(after_date=after_date, sender=self.sender)
         return f"from:{self.sender} after:{after_date}"
 
 

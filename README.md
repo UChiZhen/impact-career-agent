@@ -136,6 +136,15 @@ career-agent scan-news --impactalpha-email-live \
   --token-path ~/path/to/token.json
 ```
 
+If a user's newsletter arrives from a different sender or needs a label-based
+Gmail search, override the query without changing code:
+
+```bash
+career-agent scan-news --impactalpha-email-live \
+  --impactalpha-sender editor@impactalpha.com \
+  --impactalpha-query 'from:{sender} subject:"The Brief" after:{after_date}'
+```
+
 By default, `scan-news` hides signal titles. Use `--show-details` only when you
 explicitly want article/deal titles in the terminal.
 

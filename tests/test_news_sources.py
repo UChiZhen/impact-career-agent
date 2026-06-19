@@ -142,6 +142,17 @@ def test_impactalpha_config_builds_sender_query():
     assert config.gmail_query("2026/06/18") == "from:editor@impactalpha.com after:2026/06/18"
 
 
+def test_impactalpha_config_supports_query_template():
+    config = ImpactAlphaNewsletterConfig(
+        sender="newsletter@example.com",
+        query='from:{sender} subject:"The Brief" after:{after_date}',
+    )
+
+    assert config.gmail_query("2026/06/18") == (
+        'from:newsletter@example.com subject:"The Brief" after:2026/06/18'
+    )
+
+
 def test_classify_capital_signal_programs():
     assert classify_capital_signal("new accelerator program for climate founders") == (
         "program_or_grant"
