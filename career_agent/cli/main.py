@@ -17,6 +17,7 @@ from career_agent.demo import (
 )
 from career_agent.llm import GeminiProvider, MockLLMProvider
 from career_agent.scoring.job_fit import score_opportunities
+from career_agent.sinks.email import GmailEmailSender, config_from_env
 from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
@@ -232,6 +233,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Maximum opportunity rows to print when --show-details is used.",
     )
+    jobs_parser.add_argument(
+        "--send-email",
+        action="store_true",
+        help="Send the job scan digest through Gmail.",
+    )
+    jobs_parser.add_argument("--email-to", help="Recipient email address.")
+    jobs_parser.add_argument("--email-subject", help="Optional digest email subject.")
     return parser
 
 
@@ -425,12 +433,27 @@ def run_job_scan(args: argparse.Namespace) -> str:
         source_summary.update(score_summary(deduped))
 
     source_summary["deduped_total"] = len(deduped)
-    return format_job_scan_summary(
+    summary_text = format_job_scan_summary(
         source_summary=source_summary,
         opportunities=deduped,
         show_details=args.show_details,
         limit=args.limit,
     )
+    if args.send_email:
+        sender = GmailEmailSender(
+            config_from_env(
+                to_email=args.email_to,
+                credentials_path=args.credentials_path,
+                token_path=args.token_path,
+            )
+        )
+        send_result = sender.send_digest(
+            opportunities=deduped,
+            source_summary=source_summary,
+            subject=args.email_subject,
+        )
+        summary_text = append_email_send_summary(summary_text, send_result)
+    return summary_text
 
 
 def scoring_provider_from_args(args: argparse.Namespace, opportunities):
@@ -568,6 +591,16 @@ def format_job_scan_summary(
         lines.append("Details hidden. Use --show-details to print company/title/location rows.")
 
     return "\n".join(lines)
+
+
+def append_email_send_summary(summary_text: str, send_result: dict) -> str:
+    if send_result.get("success"):
+        message_id = send_result.get("message_id", "")
+        suffix = "Email sent: yes"
+        if message_id:
+            suffix += f" ({message_id})"
+        return f"{summary_text}\n{suffix}"
+    return f"{summary_text}\nEmail sent: no ({send_result.get('error', 'unknown error')})"
 
 
 def load_env_file(path: Path) -> None:

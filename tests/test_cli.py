@@ -215,6 +215,42 @@ def test_scan_jobs_live_command_uses_safe_summary(monkeypatch):
     assert "Example Capital | Analyst | Chicago" in text
 
 
+def test_scan_jobs_send_email_uses_sender(monkeypatch):
+    sent = {}
+
+    class FakeSender:
+        def __init__(self, config):
+            self.config = config
+
+        def send_digest(self, *, opportunities, source_summary, subject=None):
+            sent["to_email"] = self.config.to_email
+            sent["count"] = len(opportunities)
+            sent["subject"] = subject
+            return {"success": True, "message_id": "message-1"}
+
+    monkeypatch.setenv("GMAIL_ADDRESS", "user@example.com")
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_PATH", "~/credentials.json")
+    monkeypatch.setenv("GOOGLE_TOKEN_PATH", "~/token.json")
+    monkeypatch.setattr("career_agent.cli.main.GmailEmailSender", FakeSender)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--send-email",
+                "--email-subject",
+                "Test Digest",
+            ]
+        )
+
+    assert exit_code == 0
+    assert sent == {"to_email": "user@example.com", "count": 3, "subject": "Test Digest"}
+    assert "Email sent: yes (message-1)" in output.getvalue()
+
+
 def test_format_job_scan_summary_hides_details_by_default():
     opportunity = Opportunity(
         source="career_page",

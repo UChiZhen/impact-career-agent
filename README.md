@@ -101,6 +101,19 @@ career-agent scan-jobs \
   --show-details
 ```
 
+Send the same digest through Gmail only when explicitly requested:
+
+```bash
+career-agent scan-jobs \
+  --env-file /path/to/private/.env \
+  --score \
+  --send-email \
+  --email-to you@example.com
+```
+
+News signals from `daily_news` are not yet part of this unified digest. They are
+the next pipeline to migrate after email sending.
+
 The live LinkedIn email source preserves the working Gmail flow from the
 original `linkedin_email` project:
 
@@ -240,7 +253,9 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Port job-fit scoring contract.
 - [x] Add opportunity source contract and fixture sources.
 - [x] Add live source connector boundaries.
-- [ ] Port live job discovery modules.
+- [x] Port live job discovery modules.
+- [x] Add unified job scan scoring and Gmail digest sending.
+- [ ] Port news/signal discovery modules.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.
