@@ -20,7 +20,10 @@ from career_agent.demo import (
     run_demo,
 )
 from career_agent.llm import GeminiProvider, LLMResponse, MockLLMProvider
-from career_agent.scoring.job_fit import score_opportunities
+from career_agent.scoring.job_fit import (
+    fallback_score_opportunity,
+    score_opportunities_with_fallback,
+)
 from career_agent.scoring.signals import (
     mock_signal_score_response,
     score_signals,
@@ -382,6 +385,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-details",
         action="store_true",
         help="Print opportunity company/title/location rows.",
+    )
+    jobs_parser.add_argument(
+        "--include-unscored",
+        action="store_true",
+        help="Include unscored opportunities in email digests. Hidden by default.",
     )
     jobs_parser.add_argument(
         "--score",
@@ -967,8 +975,14 @@ def run_job_scan(args: argparse.Namespace) -> str:
     if args.score:
         candidate = load_candidate_profile(Path(args.candidate_profile))
         provider = scoring_provider_from_args(args, deduped)
-        deduped = score_opportunities(deduped, candidate, provider)
+        deduped = score_opportunities_with_fallback(deduped, candidate, provider)
         source_summary.update(score_summary(deduped))
+        source_summary.update(scoring_source_summary(deduped))
+    elif args.send_email:
+        candidate = load_candidate_profile(Path(args.candidate_profile))
+        deduped = score_unscored_opportunities_for_digest(deduped, candidate)
+        source_summary.update(score_summary(deduped))
+        source_summary.update(scoring_source_summary(deduped))
 
     if args.include_news:
         signals, signal_summary = fetch_and_score_signals_for_job_scan(args)
@@ -994,6 +1008,7 @@ def run_job_scan(args: argparse.Namespace) -> str:
             opportunities=deduped,
             source_summary=source_summary,
             signals=signals,
+            include_unscored=args.include_unscored,
             subject=args.email_subject,
         )
         summary_text = append_email_send_summary(summary_text, send_result)
@@ -1105,6 +1120,31 @@ def score_summary(opportunities) -> dict[str, int]:
         if opportunity.fit:
             counts[opportunity.fit.recommended_action] += 1
     return {f"score_{key}": value for key, value in counts.items()}
+
+
+def scoring_source_summary(opportunities) -> dict[str, int]:
+    """Count whether scores came from an LLM or fallback path."""
+    counts = {"llm": 0, "fallback": 0, "unknown": 0}
+    for opportunity in opportunities:
+        source = opportunity.metadata.get("scoring_source", "unknown")
+        if source not in counts:
+            source = "unknown"
+        counts[source] += 1
+    return {f"scoring_source_{key}": value for key, value in counts.items()}
+
+
+def score_unscored_opportunities_for_digest(opportunities, candidate):
+    """Ensure emailed opportunities have a score without requiring an LLM call."""
+    return [
+        opportunity
+        if opportunity.fit is not None
+        else fallback_score_opportunity(
+            opportunity,
+            candidate,
+            reason="Email digest requested without --score.",
+        )
+        for opportunity in opportunities
+    ]
 
 
 def fetch_linkedin_email_opportunities_for_job_scan(args: argparse.Namespace):

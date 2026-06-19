@@ -168,6 +168,8 @@ Implemented:
 - added `career-agent draft-application` for credential-free packet previews
 - added fictional `examples/sample_data/master_resume.yaml`
 - added mock-provider tests with no private resume content or API calls
+- documented local-first application material storage, with Google Drive,
+  Google Sheet write-back, and email delivery as future opt-in sinks
 
 Next:
 
@@ -199,6 +201,20 @@ Next:
 - add SEC Form D / EDGAR experimental parser
 - score signals with user watchlist context
 - send a live combined digest after recipient confirmation
+
+### Step 6b: Digest reliability
+
+Status: done.
+
+Implemented:
+
+- LLM job scoring now falls back to deterministic local scoring if provider
+  output fails or has the wrong shape
+- job digest emails hide unscored opportunities by default
+- `scan-jobs --send-email` applies local fallback scoring when the user did not
+  request `--score`, so emailed opportunities remain actionable without
+  requiring an API call
+- `--include-unscored` remains available for extraction debugging
 
 ### Step 7: OSS readiness
 

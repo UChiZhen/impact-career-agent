@@ -21,12 +21,31 @@ def test_render_job_digest_groups_by_action():
 
     assert "Apply Now (1)" in digest["text"]
     assert "Review (1)" in digest["text"]
-    assert "Not Scored Yet (1)" in digest["text"]
+    assert "Not Scored Yet" not in digest["text"]
     assert "Impact Career Agent" in digest["html"]
     # Internal source diagnostics should not leak into the reader-facing digest.
     assert "deduped_total" not in digest["html"]
     assert "Source Summary" not in digest["html"]
     assert "Impact Analyst" in digest["html"]
+    assert "Data Analyst" not in digest["text"]
+    assert "Data Analyst" not in digest["html"]
+
+
+def test_render_job_digest_can_include_unscored_when_requested():
+    opportunities = [
+        scored_opportunity("Impact Analyst", "apply_now", 88),
+        Opportunity(source="linkedin_search", company="Example Bank", job_title="Data Analyst"),
+    ]
+
+    digest = render_job_digest(
+        opportunities,
+        {"deduped_total": 2},
+        include_unscored=True,
+    )
+
+    assert "Not Scored Yet (1)" in digest["text"]
+    assert "Data Analyst" in digest["text"]
+    assert "Not Scored Yet" in digest["html"]
 
 
 def test_render_job_digest_can_include_capital_signals_before_jobs():

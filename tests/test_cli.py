@@ -415,10 +415,21 @@ def test_scan_jobs_send_email_uses_sender(monkeypatch):
         def __init__(self, config):
             self.config = config
 
-        def send_digest(self, *, opportunities, source_summary, signals=None, subject=None):
+        def send_digest(
+            self,
+            *,
+            opportunities,
+            source_summary,
+            signals=None,
+            include_unscored=False,
+            subject=None,
+        ):
             sent["to_email"] = self.config.to_email
             sent["count"] = len(opportunities)
+            sent["scored_count"] = sum(1 for opportunity in opportunities if opportunity.fit)
             sent["signals"] = len(signals or [])
+            sent["include_unscored"] = include_unscored
+            sent["fallback_count"] = source_summary.get("scoring_source_fallback")
             sent["subject"] = subject
             return {"success": True, "message_id": "message-1"}
 
@@ -444,9 +455,13 @@ def test_scan_jobs_send_email_uses_sender(monkeypatch):
     assert sent == {
         "to_email": "user@example.com",
         "count": 3,
+        "scored_count": 3,
         "signals": 0,
+        "include_unscored": False,
+        "fallback_count": 3,
         "subject": "Test Digest",
     }
+    assert "scoring_source_fallback: 3" in output.getvalue()
     assert "Email sent: yes (message-1)" in output.getvalue()
 
 
@@ -516,9 +531,18 @@ def test_scan_jobs_send_email_includes_news_signals(monkeypatch):
         def __init__(self, config):
             self.config = config
 
-        def send_digest(self, *, opportunities, source_summary, signals=None, subject=None):
+        def send_digest(
+            self,
+            *,
+            opportunities,
+            source_summary,
+            signals=None,
+            include_unscored=False,
+            subject=None,
+        ):
             sent["opportunities"] = len(opportunities)
             sent["signals"] = len(signals or [])
+            sent["include_unscored"] = include_unscored
             sent["top_signals"] = source_summary.get("top_signals")
             return {"success": True, "message_id": "message-1"}
 
@@ -553,7 +577,12 @@ def test_scan_jobs_send_email_includes_news_signals(monkeypatch):
         )
 
     assert exit_code == 0
-    assert sent == {"opportunities": 3, "signals": 1, "top_signals": 1}
+    assert sent == {
+        "opportunities": 3,
+        "signals": 1,
+        "include_unscored": False,
+        "top_signals": 1,
+    }
 
 
 def test_mock_score_response_matches_opportunity_count():

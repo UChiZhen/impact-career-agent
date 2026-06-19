@@ -6,8 +6,10 @@ from career_agent.core import CandidateProfile, Opportunity
 from career_agent.llm import LLMProviderError, MockLLMProvider
 from career_agent.scoring import (
     build_job_fit_prompt,
+    fallback_score_opportunity,
     fit_score_from_dict,
     normalize_action,
+    score_opportunities_with_fallback,
     score_opportunity,
 )
 
@@ -102,3 +104,51 @@ def test_score_opportunity_rejects_wrong_number_of_results():
 
     with pytest.raises(LLMProviderError, match="Expected 1 scored jobs"):
         score_opportunity(demo_opportunity(), demo_candidate(), provider)
+
+
+def test_fallback_score_opportunity_adds_fit_and_metadata():
+    scored = fallback_score_opportunity(
+        demo_opportunity(),
+        demo_candidate(),
+        reason="provider unavailable",
+    )
+
+    assert scored.fit is not None
+    assert scored.fit.total > 0
+    assert scored.fit.recommended_action in {"apply_now", "review", "skip"}
+    assert scored.metadata["scoring_source"] == "fallback"
+    assert "provider unavailable" in scored.metadata["scoring_fallback_reason"]
+
+
+def test_score_opportunities_with_fallback_marks_llm_success():
+    payload = [
+        {
+            "total": 84,
+            "recommended_action": "apply_now",
+            "match_summary": "Strong fit.",
+        }
+    ]
+    provider = MockLLMProvider(default_response=json.dumps(payload))
+
+    scored = score_opportunities_with_fallback(
+        [demo_opportunity()],
+        demo_candidate(),
+        provider,
+    )
+
+    assert scored[0].fit.total == 84
+    assert scored[0].metadata["scoring_source"] == "llm"
+
+
+def test_score_opportunities_with_fallback_handles_provider_shape_failure():
+    provider = MockLLMProvider(default_response="[]")
+
+    scored = score_opportunities_with_fallback(
+        [demo_opportunity()],
+        demo_candidate(),
+        provider,
+    )
+
+    assert scored[0].fit is not None
+    assert scored[0].metadata["scoring_source"] == "fallback"
+    assert "Expected 1 scored jobs" in scored[0].metadata["scoring_fallback_reason"]

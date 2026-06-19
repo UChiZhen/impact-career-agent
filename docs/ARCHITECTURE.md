@@ -183,6 +183,24 @@ The combined daily digest can include scored `Capital Signals` before job
 opportunities. This is opt-in through `scan-jobs --include-news`; existing job
 digests remain unchanged unless news is explicitly requested.
 
+## Job Fit Scoring
+
+Job fit scoring is designed to keep the daily digest actionable even when a
+provider is unavailable:
+
+- `score_opportunities_with_fallback` first tries the configured LLM provider.
+- If provider parsing, response shape, or network execution fails, each
+  opportunity receives a deterministic local fallback score.
+- Scored opportunities include `metadata.scoring_source` as `llm` or
+  `fallback` so summaries and tests can distinguish the path.
+- Email digests hide unscored opportunities by default. The CLI applies local
+  fallback scoring before sending a digest when the user did not request
+  `--score`, avoiding blank or unranked job sections without requiring an API
+  call.
+
+`--include-unscored` is a debugging escape hatch for extraction development,
+not the normal reader-facing digest behavior.
+
 ## Application Generation
 
 The first `auto_resume` migration layer is provider-agnostic structured
@@ -206,6 +224,17 @@ The current modules are:
 
 DOCX/PDF/PNG rendering remains a separate migration layer so private resumes,
 templates, and generated files stay out of the public v0.1 fixtures.
+
+Application material storage should stay pluggable:
+
+- local filesystem / structured JSON preview as the v0.1 default.
+- optional Google Drive output folders for users who want cloud persistence.
+- optional Google Sheet write-back for status tracking and packet links.
+- optional email attachments or links after the user explicitly enables a mail
+  sink.
+
+This avoids requiring Google authentication during onboarding while still
+leaving a clear path for always-on hosted workflows.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local

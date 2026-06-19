@@ -36,9 +36,15 @@ class GmailEmailSender:
         opportunities: list[Opportunity],
         source_summary: dict[str, int],
         signals: list[Signal] | None = None,
+        include_unscored: bool = False,
         subject: str | None = None,
     ) -> dict:
-        digest = render_job_digest(opportunities, source_summary, signals=signals)
+        digest = render_job_digest(
+            opportunities,
+            source_summary,
+            signals=signals,
+            include_unscored=include_unscored,
+        )
         return self.send_email(
             subject=subject or build_digest_subject(opportunities),
             html=digest["html"],
@@ -148,11 +154,16 @@ def render_job_digest(
     source_summary: dict[str, int],
     *,
     signals: list[Signal] | None = None,
+    include_unscored: bool = False,
 ) -> dict[str, str]:
     """Render text and HTML job digest bodies."""
     apply_now = by_action(opportunities, "apply_now")
     review = by_action(opportunities, "review")
-    unscored = [opportunity for opportunity in opportunities if opportunity.fit is None]
+    unscored = (
+        [opportunity for opportunity in opportunities if opportunity.fit is None]
+        if include_unscored
+        else []
+    )
     digest_signals = signals or []
 
     return {

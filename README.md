@@ -100,6 +100,12 @@ career-agent scan-jobs \
   --show-details
 ```
 
+If live LLM scoring fails, the scanner falls back to a deterministic local
+score so the digest can still give a directional action. Email digests hide
+unscored opportunities by default; add `--include-unscored` only when debugging
+raw extraction output. When `--send-email` is used without `--score`, the CLI
+applies local fallback scoring before rendering the digest, with no LLM call.
+
 Send the same digest through Gmail only when explicitly requested:
 
 ```bash
@@ -147,6 +153,10 @@ audit notes
 
 The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX,
 PDF, PNG rendering and Google Sheet write-back are planned follow-up modules.
+Generated application materials stay local by default in v0.1. Future storage
+sinks should be opt-in, for example Google Drive folders, Google Sheet status
+updates, or emailed links/attachments, so users are not forced into Google
+authentication before they need cloud persistence.
 
 Preview this apply stage without any private resume or API key:
 

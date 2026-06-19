@@ -5,8 +5,10 @@ from career_agent.scoring.job_fit import (
     apply_fit_score,
     build_job_fit_prompt,
     fit_score_from_dict,
+    fallback_score_opportunity,
     normalize_action,
     score_opportunities,
+    score_opportunities_with_fallback,
     score_opportunity,
 )
 from career_agent.scoring.signals import (
@@ -26,8 +28,10 @@ __all__ = [
     "apply_fit_score",
     "build_job_fit_prompt",
     "fit_score_from_dict",
+    "fallback_score_opportunity",
     "normalize_action",
     "score_opportunities",
+    "score_opportunities_with_fallback",
     "score_opportunity",
     "SIGNAL_SCORING_SYSTEM_PROMPT",
     "apply_signal_score",

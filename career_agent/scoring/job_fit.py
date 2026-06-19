@@ -100,6 +100,27 @@ def score_opportunities(
     ]
 
 
+def score_opportunities_with_fallback(
+    opportunities: list[Opportunity],
+    candidate: CandidateProfile,
+    provider: LLMProvider,
+) -> list[Opportunity]:
+    """Score opportunities with an LLM provider, falling back locally on failure."""
+    try:
+        scored = score_opportunities(opportunities, candidate, provider)
+        return [
+            opportunity.model_copy(
+                update={"metadata": {**opportunity.metadata, "scoring_source": "llm"}}
+            )
+            for opportunity in scored
+        ]
+    except Exception as exc:
+        return [
+            fallback_score_opportunity(opportunity, candidate, reason=str(exc))
+            for opportunity in opportunities
+        ]
+
+
 def score_opportunity(
     opportunity: Opportunity,
     candidate: CandidateProfile,
@@ -112,6 +133,114 @@ def score_opportunity(
 def apply_fit_score(opportunity: Opportunity, fit: FitScore) -> Opportunity:
     """Return a copy of an opportunity with a fit score attached."""
     return opportunity.model_copy(update={"fit": fit})
+
+
+def fallback_score_opportunity(
+    opportunity: Opportunity,
+    candidate: CandidateProfile,
+    *,
+    reason: str = "",
+) -> Opportunity:
+    """Create a deterministic local fit score when provider scoring fails."""
+    combined_text = " ".join(
+        [
+            opportunity.job_title,
+            opportunity.company,
+            opportunity.location,
+            opportunity.description,
+        ]
+    ).lower()
+    skill_hits = [
+        skill
+        for skill in candidate.skills
+        if skill and skill.lower() in combined_text
+    ]
+    geography_hit = any(
+        geo.lower() in opportunity.location.lower() or geo.lower() in combined_text
+        for geo in candidate.target_geography
+        if geo
+    )
+    org_type_hit = any(
+        org_type.lower() in combined_text
+        for org_type in candidate.target_org_types
+        if org_type
+    )
+    level_hit = any(
+        level.lower() in combined_text
+        for level in candidate.preferred_levels
+        if level
+    )
+    excluded_hit = any(
+        keyword.lower() in combined_text
+        for keyword in candidate.excluded_keywords
+        if keyword
+    )
+
+    skills_match = min(25, max(8, len(skill_hits) * 8))
+    experience_relevance = (
+        22 if has_any(combined_text, ("impact", "finance", "investment")) else 12
+    )
+    geography_match = 15 if geography_hit else 6
+    org_type_match = 15 if org_type_hit else 8
+    level_match = 10 if level_hit else 6
+    background_fit = 10 if skill_hits and has_any(combined_text, ("impact", "finance")) else 6
+
+    total = (
+        skills_match
+        + experience_relevance
+        + geography_match
+        + org_type_match
+        + level_match
+        + background_fit
+    )
+    if excluded_hit:
+        total = min(total, 45)
+    total = _bounded_int(total, 0, 100)
+
+    top_reasons = ["Fallback local scoring used because provider scoring failed."]
+    if skill_hits:
+        top_reasons.append(f"Keyword overlap: {', '.join(skill_hits[:4])}.")
+    if geography_hit:
+        top_reasons.append("Location matches target geography.")
+    if org_type_hit:
+        top_reasons.append("Role language matches target organization types.")
+
+    risks = []
+    if reason:
+        risks.append(f"Provider scoring failed: {reason[:160]}")
+    if not skill_hits:
+        risks.append("Few explicit skill keywords found in the available description.")
+    if excluded_hit:
+        risks.append("Excluded seniority keyword detected.")
+
+    fit = FitScore(
+        total=total,
+        recommended_action=normalize_action(None, total),
+        skills_match=skills_match,
+        experience_relevance=experience_relevance,
+        geography_match=geography_match,
+        org_type_match=org_type_match,
+        level_match=level_match,
+        background_fit=background_fit,
+        match_summary=(
+            f"Local fallback score for {opportunity.job_title} at {opportunity.company}. "
+            "Review before acting because the LLM scorer did not complete."
+        ),
+        top_reasons=top_reasons,
+        risks=risks,
+        resume_angle=(
+            f"Position {candidate.name} around "
+            f"{', '.join(skill_hits[:3]) if skill_hits else 'mission-driven analysis'} "
+            f"for {opportunity.company}."
+        ),
+    )
+    metadata = {
+        **opportunity.metadata,
+        "scoring_source": "fallback",
+    }
+    if reason:
+        metadata["scoring_fallback_reason"] = reason[:240]
+    return opportunity.model_copy(update={"fit": fit, "metadata": metadata})
 
 
 def fit_score_from_dict(item: dict[str, Any]) -> FitScore:
@@ -182,3 +311,8 @@ def _bounded_int(value: Any, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         parsed = minimum
     return max(minimum, min(maximum, parsed))
+
+
+def has_any(text: str, needles: tuple[str, ...]) -> bool:
+    """Return whether any keyword appears in text."""
+    return any(needle in text for needle in needles)
