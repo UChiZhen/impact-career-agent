@@ -175,12 +175,14 @@ Implemented:
 - career-oriented LLM signal scoring adapted from the legacy `daily_news`
   scoring idea
 - `career-agent scan-news` with safe default output
+- `career-agent scan-jobs --include-news` to place top capital signals before
+  opportunities in the daily digest
 
 Next:
 
 - add SEC Form D / EDGAR experimental parser
 - score signals with user watchlist context
-- merge top capital signals into the daily email digest
+- send a live combined digest after recipient confirmation
 
 ### Step 7: OSS readiness
 

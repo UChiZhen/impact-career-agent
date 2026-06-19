@@ -10,7 +10,7 @@ from email.mime.text import MIMEText
 from html import escape
 from typing import Any
 
-from career_agent.core import Opportunity
+from career_agent.core import Opportunity, Signal
 from career_agent.sources.watchlist import JOB_RADAR_GOOGLE_SCOPES, resolve_path
 
 
@@ -35,9 +35,10 @@ class GmailEmailSender:
         *,
         opportunities: list[Opportunity],
         source_summary: dict[str, int],
+        signals: list[Signal] | None = None,
         subject: str | None = None,
     ) -> dict:
-        digest = render_job_digest(opportunities, source_summary)
+        digest = render_job_digest(opportunities, source_summary, signals=signals)
         return self.send_email(
             subject=subject or build_digest_subject(opportunities),
             html=digest["html"],
@@ -145,15 +146,30 @@ def build_digest_subject(opportunities: list[Opportunity]) -> str:
 def render_job_digest(
     opportunities: list[Opportunity],
     source_summary: dict[str, int],
+    *,
+    signals: list[Signal] | None = None,
 ) -> dict[str, str]:
     """Render text and HTML job digest bodies."""
     apply_now = by_action(opportunities, "apply_now")
     review = by_action(opportunities, "review")
     unscored = [opportunity for opportunity in opportunities if opportunity.fit is None]
+    digest_signals = signals or []
 
     return {
-        "text": render_job_digest_text(apply_now, review, unscored, source_summary),
-        "html": render_job_digest_html(apply_now, review, unscored, source_summary),
+        "text": render_job_digest_text(
+            apply_now,
+            review,
+            unscored,
+            source_summary,
+            digest_signals,
+        ),
+        "html": render_job_digest_html(
+            apply_now,
+            review,
+            unscored,
+            source_summary,
+            digest_signals,
+        ),
     }
 
 
@@ -162,10 +178,12 @@ def render_job_digest_text(
     review: list[Opportunity],
     unscored: list[Opportunity],
     source_summary: dict[str, int],
+    signals: list[Signal],
 ) -> str:
     lines = ["Impact Career Agent Digest", "", "Source summary"]
     lines.extend(f"- {key}: {value}" for key, value in source_summary.items())
     lines.append("")
+    lines.extend(render_signal_text_section(signals))
     lines.extend(render_text_section("Apply Now", apply_now))
     lines.extend(render_text_section("Review", review))
     lines.extend(render_text_section("Unscored", unscored))
@@ -189,11 +207,31 @@ def render_text_section(title: str, opportunities: list[Opportunity]) -> list[st
     return lines
 
 
+def render_signal_text_section(signals: list[Signal]) -> list[str]:
+    if not signals:
+        return []
+    lines = [f"Capital Signals ({len(signals)})"]
+    for signal in signals[:5]:
+        score = signal.relevance_score if signal.relevance_score is not None else "unscored"
+        confidence = signal.confidence if signal.confidence is not None else "n/a"
+        subtype = signal.signal_subtype or "news"
+        action = signal.suggested_action or "review"
+        lines.append(f"- [{score}/10, confidence {confidence}] {signal.title}")
+        lines.append(f"  Source: {signal.source} | Type: {subtype} | Action: {action}")
+        if signal.career_hypothesis:
+            lines.append(f"  Why it matters: {signal.career_hypothesis}")
+        if signal.url:
+            lines.append(f"  URL: {signal.url}")
+    lines.append("")
+    return lines
+
+
 def render_job_digest_html(
     apply_now: list[Opportunity],
     review: list[Opportunity],
     unscored: list[Opportunity],
     source_summary: dict[str, int],
+    signals: list[Signal],
 ) -> str:
     summary_html = "".join(
         f"<li><strong>{escape(key)}</strong>: {value}</li>" for key, value in source_summary.items()
@@ -204,6 +242,7 @@ def render_job_digest_html(
     <h1>Impact Career Agent Digest</h1>
     <h2>Source Summary</h2>
     <ul>{summary_html}</ul>
+    {render_signal_html_section(signals)}
     {render_html_section("Apply Now", apply_now)}
     {render_html_section("Review", review)}
     {render_html_section("Unscored", unscored)}
@@ -216,6 +255,34 @@ def render_html_section(title: str, opportunities: list[Opportunity]) -> str:
         return ""
     cards = "".join(render_html_card(opportunity) for opportunity in sort_opportunities(opportunities)[:20])
     return f"<h2>{escape(title)} ({len(opportunities)})</h2>{cards}"
+
+
+def render_signal_html_section(signals: list[Signal]) -> str:
+    if not signals:
+        return ""
+    cards = "".join(render_signal_html_card(signal) for signal in signals[:5])
+    return f"<h2>Capital Signals ({len(signals)})</h2>{cards}"
+
+
+def render_signal_html_card(signal: Signal) -> str:
+    score = signal.relevance_score if signal.relevance_score is not None else "unscored"
+    confidence = signal.confidence if signal.confidence is not None else "n/a"
+    subtype = signal.signal_subtype or "news"
+    action = signal.suggested_action or "review"
+    title = (
+        f'<a href="{escape(signal.url)}">{escape(signal.title)}</a>'
+        if signal.url
+        else escape(signal.title)
+    )
+    hypothesis = signal.career_hypothesis or ""
+    return f"""
+    <div style="border:1px solid #ddd;border-radius:6px;padding:12px;margin:10px 0;">
+      <div style="font-weight:600;">{title}</div>
+      <div>{escape(signal.source)} | {escape(subtype)} | {escape(str(score))}/10 | confidence {escape(str(confidence))}</div>
+      <div>Suggested action: {escape(action)}</div>
+      <p>{escape(hypothesis)}</p>
+    </div>
+    """
 
 
 def render_html_card(opportunity: Opportunity) -> str:

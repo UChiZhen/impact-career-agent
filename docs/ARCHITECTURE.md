@@ -179,6 +179,10 @@ Signal scoring returns fields such as `relevance_score`, `confidence`,
 `suggested_action`. Top signals are sorted for digest display, defaulting to
 five items.
 
+The combined daily digest can include scored `Capital Signals` before job
+opportunities. This is opt-in through `scan-jobs --include-news`; existing job
+digests remain unchanged unless news is explicitly requested.
+
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local
 credentials.

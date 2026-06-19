@@ -1,7 +1,7 @@
 from email import message_from_bytes
 import base64
 
-from career_agent.core import FitScore, Opportunity
+from career_agent.core import FitScore, Opportunity, Signal
 from career_agent.sinks.email import (
     GmailEmailSender,
     GmailSenderConfig,
@@ -24,6 +24,36 @@ def test_render_job_digest_groups_by_action():
     assert "Unscored (1)" in digest["text"]
     assert "Impact Career Agent Digest" in digest["html"]
     assert "deduped_total" in digest["html"]
+
+
+def test_render_job_digest_can_include_capital_signals_before_jobs():
+    opportunities = [scored_opportunity("Impact Analyst", "apply_now", 88)]
+    signals = [
+        Signal(
+            source="ImpactAlpha",
+            title="Example fund closes new vehicle",
+            url="https://example.org/signal",
+            signal_subtype="fund_close",
+            relevance_score=9,
+            confidence=8,
+            suggested_action="rescan_org_jobs",
+            career_hypothesis="Fresh capital may create investment-team hiring.",
+        )
+    ]
+
+    digest = render_job_digest(
+        opportunities,
+        {"deduped_total": 1, "top_signals": 1},
+        signals=signals,
+    )
+
+    assert "Capital Signals (1)" in digest["text"]
+    assert "Example fund closes new vehicle" in digest["text"]
+    assert "https://example.org/signal" in digest["text"]
+    assert digest["text"].index("Capital Signals") < digest["text"].index("Apply Now")
+    assert "Capital Signals (1)" in digest["html"]
+    assert "Fresh capital may create investment-team hiring." in digest["html"]
+    assert digest["html"].index("Capital Signals") < digest["html"].index("Apply Now")
 
 
 def test_build_digest_subject_counts_actions():

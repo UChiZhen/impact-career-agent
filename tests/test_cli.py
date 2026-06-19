@@ -389,9 +389,10 @@ def test_scan_jobs_send_email_uses_sender(monkeypatch):
         def __init__(self, config):
             self.config = config
 
-        def send_digest(self, *, opportunities, source_summary, subject=None):
+        def send_digest(self, *, opportunities, source_summary, signals=None, subject=None):
             sent["to_email"] = self.config.to_email
             sent["count"] = len(opportunities)
+            sent["signals"] = len(signals or [])
             sent["subject"] = subject
             return {"success": True, "message_id": "message-1"}
 
@@ -414,7 +415,12 @@ def test_scan_jobs_send_email_uses_sender(monkeypatch):
         )
 
     assert exit_code == 0
-    assert sent == {"to_email": "user@example.com", "count": 3, "subject": "Test Digest"}
+    assert sent == {
+        "to_email": "user@example.com",
+        "count": 3,
+        "signals": 0,
+        "subject": "Test Digest",
+    }
     assert "Email sent: yes (message-1)" in output.getvalue()
 
 
@@ -435,6 +441,93 @@ def test_format_job_scan_summary_hides_details_by_default():
 
     assert "Private Org" not in summary
     assert "Details hidden" in summary
+
+
+def test_scan_jobs_can_include_scored_news_signals(monkeypatch):
+    from career_agent.core import Signal
+
+    monkeypatch.setattr(
+        "career_agent.cli.main.RSSNewsSource",
+        lambda config: SimpleNamespace(
+            fetch=lambda: [
+                Signal(
+                    source="ImpactAlpha",
+                    title=f"Capital signal {index}",
+                    signal_subtype="fund_close",
+                )
+                for index in range(7)
+            ]
+        ),
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--include-news",
+                "--news-rss-live",
+                "--show-details",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "news_rss: 7" in text
+    assert "top_signals: 5" in text
+    assert "Top capital signals" in text
+    assert text.count("Capital signal") == 5
+
+
+def test_scan_jobs_send_email_includes_news_signals(monkeypatch):
+    from career_agent.core import Signal
+
+    sent = {}
+
+    class FakeSender:
+        def __init__(self, config):
+            self.config = config
+
+        def send_digest(self, *, opportunities, source_summary, signals=None, subject=None):
+            sent["opportunities"] = len(opportunities)
+            sent["signals"] = len(signals or [])
+            sent["top_signals"] = source_summary.get("top_signals")
+            return {"success": True, "message_id": "message-1"}
+
+    monkeypatch.setenv("GMAIL_ADDRESS", "user@example.com")
+    monkeypatch.setenv("GOOGLE_CREDENTIALS_PATH", "~/credentials.json")
+    monkeypatch.setenv("GOOGLE_TOKEN_PATH", "~/token.json")
+    monkeypatch.setattr("career_agent.cli.main.GmailEmailSender", FakeSender)
+    monkeypatch.setattr(
+        "career_agent.cli.main.RSSNewsSource",
+        lambda config: SimpleNamespace(
+            fetch=lambda: [
+                Signal(
+                    source="ImpactAlpha",
+                    title="Fund closes new vehicle",
+                    signal_subtype="fund_close",
+                )
+            ]
+        ),
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--include-news",
+                "--news-rss-live",
+                "--send-email",
+            ]
+        )
+
+    assert exit_code == 0
+    assert sent == {"opportunities": 3, "signals": 1, "top_signals": 1}
 
 
 def test_mock_score_response_matches_opportunity_count():

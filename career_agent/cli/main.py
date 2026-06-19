@@ -357,6 +357,51 @@ def build_parser() -> argparse.ArgumentParser:
     )
     jobs_parser.add_argument("--email-to", help="Recipient email address.")
     jobs_parser.add_argument("--email-subject", help="Optional digest email subject.")
+    jobs_parser.add_argument(
+        "--include-news",
+        action="store_true",
+        help="Include top capital signals before job opportunities in summaries and email digests.",
+    )
+    jobs_parser.add_argument(
+        "--news-source-pack",
+        default=str(DEFAULT_NEWS_SOURCE_PACK),
+        help="Path to a public news source-pack YAML file.",
+    )
+    jobs_parser.add_argument(
+        "--news-rss-live",
+        action="store_true",
+        help="Fetch live public RSS signals for the job digest.",
+    )
+    jobs_parser.add_argument(
+        "--news-impactalpha-email-live",
+        action="store_true",
+        help="Fetch ImpactAlpha newsletter emails through Gmail for the job digest.",
+    )
+    jobs_parser.add_argument(
+        "--news-impactalpha-sender",
+        help="Gmail sender to query for ImpactAlpha newsletters.",
+    )
+    jobs_parser.add_argument(
+        "--news-impactalpha-query",
+        help="Full Gmail query override. Supports {after_date} and {sender} placeholders.",
+    )
+    jobs_parser.add_argument(
+        "--news-score-provider",
+        choices=("mock", "gemini"),
+        default="mock",
+        help="Provider to use for capital signal scoring.",
+    )
+    jobs_parser.add_argument(
+        "--news-max-signals",
+        type=int,
+        help="Maximum news signals to score after fetching.",
+    )
+    jobs_parser.add_argument(
+        "--top-signals",
+        type=int,
+        default=5,
+        help="Number of scored capital signals to include in the digest.",
+    )
     return parser
 
 
@@ -669,6 +714,7 @@ def run_job_scan(args: argparse.Namespace) -> str:
         load_env_file(Path(args.env_file))
 
     opportunities = []
+    signals = []
     source_summary: dict[str, int] = {}
 
     live_enabled = (
@@ -706,10 +752,15 @@ def run_job_scan(args: argparse.Namespace) -> str:
         deduped = score_opportunities(deduped, candidate, provider)
         source_summary.update(score_summary(deduped))
 
+    if args.include_news:
+        signals, signal_summary = fetch_and_score_signals_for_job_scan(args)
+        source_summary.update(signal_summary)
+
     source_summary["deduped_total"] = len(deduped)
     summary_text = format_job_scan_summary(
         source_summary=source_summary,
         opportunities=deduped,
+        signals=signals,
         show_details=args.show_details,
         limit=args.limit,
     )
@@ -724,10 +775,66 @@ def run_job_scan(args: argparse.Namespace) -> str:
         send_result = sender.send_digest(
             opportunities=deduped,
             source_summary=source_summary,
+            signals=signals,
             subject=args.email_subject,
         )
         summary_text = append_email_send_summary(summary_text, send_result)
     return summary_text
+
+
+def fetch_and_score_signals_for_job_scan(args: argparse.Namespace):
+    """Fetch and score capital signals for the combined daily digest."""
+    source_pack = load_news_source_pack(Path(args.news_source_pack))
+    signals = []
+    source_summary: dict[str, int] = {
+        "news_source_pack_rss_feeds": len(source_pack.rss_feeds),
+    }
+
+    if args.news_rss_live:
+        rss_signals = RSSNewsSource(
+            RSSNewsSourceConfig(
+                feeds=source_pack.rss_feeds,
+                user_agent=os.getenv("IMPACT_CAREER_USER_AGENT")
+                or "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
+            )
+        ).fetch()
+        signals.extend(rss_signals)
+        source_summary["news_rss"] = len(rss_signals)
+
+    if args.news_impactalpha_email_live:
+        env_config = ImpactAlphaNewsletterConfig.from_env()
+        config = ImpactAlphaNewsletterConfig(
+            sender=args.news_impactalpha_sender or env_config.sender,
+            query=args.news_impactalpha_query or env_config.query,
+            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+            hours_back=args.email_hours_back,
+            max_results=args.email_max_results,
+        )
+        newsletter_signals = ImpactAlphaNewsletterSource(config).fetch()
+        signals.extend(newsletter_signals)
+        source_summary["news_impactalpha_email"] = len(newsletter_signals)
+
+    if args.news_max_signals is not None:
+        signals = signals[: args.news_max_signals]
+        source_summary["news_signals_selected"] = len(signals)
+
+    if signals:
+        candidate = load_candidate_profile(Path(args.candidate_profile))
+        provider = news_scoring_provider_from_args(args, signals)
+        signals = score_signals(signals, provider, candidate=candidate)
+        source_summary.update(signal_score_summary(signals))
+        signals = top_signals(signals, limit=args.top_signals)
+
+    source_summary["top_signals"] = len(signals)
+    return signals, source_summary
+
+
+def news_scoring_provider_from_args(args: argparse.Namespace, signals):
+    """Build the selected provider for news scoring inside job scans."""
+    if args.news_score_provider == "gemini":
+        return GeminiProvider()
+    return MockLLMProvider(default_response=mock_signal_score_response(signals))
 
 
 def scoring_provider_from_args(args: argparse.Namespace, opportunities):
@@ -844,12 +951,27 @@ def format_job_scan_summary(
     *,
     source_summary: dict[str, int],
     opportunities,
+    signals=None,
     show_details: bool,
     limit: int,
 ) -> str:
     lines = ["Job scan summary"]
     for key, value in source_summary.items():
         lines.append(f"{key}: {value}")
+
+    digest_signals = signals or []
+    if show_details and digest_signals:
+        lines.append("")
+        lines.append("Top capital signals")
+        for signal in digest_signals[:limit]:
+            score = signal.relevance_score if signal.relevance_score is not None else "unscored"
+            lines.append(
+                f" - {signal.source}: [{score}/10] "
+                f"{signal.title} -> {signal.suggested_action or 'review'}"
+            )
+    elif not show_details and digest_signals:
+        lines.append("")
+        lines.append("Capital signal details hidden. Use --show-details to print titles.")
 
     if show_details and opportunities:
         lines.append("")

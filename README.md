@@ -111,6 +111,31 @@ career-agent scan-jobs \
   --email-to you@example.com
 ```
 
+Include public capital signals in the same daily digest:
+
+```bash
+career-agent scan-jobs \
+  --config examples/demo_config.yaml \
+  --include-news \
+  --news-rss-live \
+  --top-signals 5
+```
+
+The `Capital Signals` section appears before job opportunities. It uses the
+default free RSS sources unless newsletter access is explicitly enabled. Add
+Gemini scoring only when you want live LLM ranking:
+
+```bash
+career-agent scan-jobs \
+  --env-file /path/to/private/.env \
+  --include-news \
+  --news-rss-live \
+  --news-score-provider gemini \
+  --news-max-signals 5 \
+  --send-email \
+  --email-to you@example.com
+```
+
 News signals from `daily_news` are being migrated as a career-oriented capital
 signal engine. The default source pack is usable without API keys for public
 RSS signals, and premium newsletters stay behind user-provided access:
