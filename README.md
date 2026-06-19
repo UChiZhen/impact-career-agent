@@ -184,6 +184,30 @@ If local PDF conversion fails, the DOCX files are still saved and the warning is
 recorded in the manifest. Hosted/cloud deployments should install LibreOffice
 and can treat PDF rendering as part of their managed runtime.
 
+Upload the user-facing packet to Google Drive when the user has authenticated:
+
+```bash
+pip install "impact-career-agent[google,documents]"
+career-agent draft-application \
+  --output drive \
+  --credentials-path ~/path/to/credentials.json \
+  --token-path ~/path/to/token.json
+```
+
+Drive output creates:
+
+```text
+Impact Career Agent/
+  Applications/
+    YYYY-MM-DD__company__role__location__hash/
+      Resume - Company - Role.docx
+      Cover Letter - Company - Role.docx
+      manifest.json
+```
+
+Use `--output both` to keep the same packet locally and in Drive. Debug JSON/TXT
+files remain local-only and are not uploaded to Drive.
+
 Use Gemini explicitly when you want a live LLM draft:
 
 ```bash

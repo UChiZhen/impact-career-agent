@@ -1,5 +1,6 @@
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 
 from career_agent import __version__
@@ -604,3 +605,74 @@ def test_mock_score_response_matches_opportunity_count():
     payload = mock_score_response(opportunities)
 
     assert payload.count("recommended_action") == 2
+
+
+def test_draft_application_drive_output_uses_drive_sink(monkeypatch):
+    calls = {}
+
+    class FakeLocalSink:
+        def __init__(self, root_dir, render_pdf=False, debug_output=False):
+            calls["local"] = {
+                "root_dir": Path(root_dir),
+                "render_pdf": render_pdf,
+                "debug_output": debug_output,
+            }
+
+        def save(self, packet, candidate):
+            folder = calls["local"]["root_dir"] / "packet-folder"
+            return SimpleNamespace(
+                folder=folder,
+                files=[
+                    folder / "resume.docx",
+                    folder / "cover_letter.docx",
+                    folder / "manifest.json",
+                ],
+                warnings=[],
+            )
+
+    class FakeDriveSink:
+        def __init__(self, config):
+            calls["drive_config"] = config
+
+        def upload_packet_folder(self, folder, files):
+            calls["drive_upload"] = {
+                "folder": folder,
+                "files": [path.name for path in files],
+            }
+            return SimpleNamespace(
+                folder_url="https://drive.google.com/drive/folders/folder-1",
+                files=[
+                    {"name": "resume.docx"},
+                    {"name": "cover_letter.docx"},
+                    {"name": "manifest.json"},
+                ],
+            )
+
+    monkeypatch.setattr("career_agent.cli.main.LocalApplicationPacketSink", FakeLocalSink)
+    monkeypatch.setattr("career_agent.cli.main.GoogleDrivePacketSink", FakeDriveSink)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "draft-application",
+                "--output",
+                "drive",
+                "--credentials-path",
+                "~/credentials.json",
+                "--token-path",
+                "~/token.json",
+            ]
+        )
+
+    assert exit_code == 0
+    assert calls["local"]["render_pdf"] is False
+    assert calls["local"]["debug_output"] is False
+    assert calls["drive_config"].root_folder_name == "Impact Career Agent"
+    assert calls["drive_config"].applications_folder_name == "Applications"
+    assert calls["drive_upload"]["files"] == [
+        "resume.docx",
+        "cover_letter.docx",
+        "manifest.json",
+    ]
+    assert "Drive folder: https://drive.google.com/drive/folders/folder-1" in output.getvalue()

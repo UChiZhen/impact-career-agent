@@ -175,10 +175,12 @@ Implemented:
   manifests; debug JSON/TXT files are opt-in only
 - made PDF rendering optional through LibreOffice, with graceful fallback when
   local conversion fails
+- added Google Drive packet upload under `Impact Career Agent/Applications`,
+  uploading only DOCX/PDF/manifest files
 
 Next:
 
-- add Google Drive application packet sink under `Impact Career Agent`
+- run an authenticated Drive smoke test with local credentials
 - keep real master resumes, generated DOCX/PDF/PNG, and templates out of git
 
 ### Step 6a: Capital signal discovery

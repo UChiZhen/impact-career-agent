@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -30,6 +31,7 @@ from career_agent.scoring.signals import (
     top_signals,
 )
 from career_agent.sinks.email import GmailEmailSender, config_from_env
+from career_agent.sinks.google_drive import GoogleDriveConfig, GoogleDrivePacketSink
 from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
@@ -122,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     application_parser.add_argument(
         "--output",
-        choices=("preview", "local"),
+        choices=("preview", "local", "drive", "both"),
         default="preview",
         help="Where to save application materials. Preview prints a summary only.",
     )
@@ -140,6 +142,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug-output",
         action="store_true",
         help="Save local JSON and audit debug files next to rendered documents.",
+    )
+    application_parser.add_argument(
+        "--credentials-path",
+        help="Path to Google OAuth client credentials JSON for Drive output.",
+    )
+    application_parser.add_argument(
+        "--token-path",
+        help="Path to Google OAuth token JSON for Drive output.",
+    )
+    application_parser.add_argument(
+        "--drive-root-folder",
+        default="Impact Career Agent",
+        help="Google Drive root folder for application packets.",
+    )
+    application_parser.add_argument(
+        "--drive-applications-folder",
+        default="Applications",
+        help="Google Drive subfolder under the root folder.",
     )
 
     email_parser = subparsers.add_parser(
@@ -555,17 +575,43 @@ def run_application_draft(args: argparse.Namespace) -> str:
     provider = application_provider_from_args(args, opportunity, candidate)
     packet = generate_application_packet(opportunity, candidate, provider)
     output_result = None
-    if args.output == "local":
+    drive_result = None
+    if args.output in {"local", "both"}:
         output_result = LocalApplicationPacketSink(
             root_dir=Path(args.output_dir),
             render_pdf=args.render_pdf,
             debug_output=args.debug_output,
         ).save(packet, candidate)
+    if args.output in {"drive", "both"}:
+        if output_result:
+            drive_result = upload_application_packet_to_drive(args, output_result)
+        else:
+            with tempfile.TemporaryDirectory(prefix="career_agent_packet_") as temp_dir:
+                transient_result = LocalApplicationPacketSink(
+                    root_dir=Path(temp_dir),
+                    render_pdf=args.render_pdf,
+                    debug_output=False,
+                ).save(packet, candidate)
+                drive_result = upload_application_packet_to_drive(args, transient_result)
     return format_application_packet_summary(
         packet,
         show_json=args.show_json,
         output_result=output_result,
+        drive_result=drive_result,
     )
+
+
+def upload_application_packet_to_drive(args: argparse.Namespace, output_result):
+    """Upload rendered application packet files to Google Drive."""
+    sink = GoogleDrivePacketSink(
+        GoogleDriveConfig(
+            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+            root_folder_name=args.drive_root_folder,
+            applications_folder_name=args.drive_applications_folder,
+        )
+    )
+    return sink.upload_packet_folder(output_result.folder, output_result.files)
 
 
 def load_master_resume(path: Path) -> dict:
@@ -675,7 +721,13 @@ def mock_cover_letter_payload(opportunity: Opportunity, candidate) -> dict:
     }
 
 
-def format_application_packet_summary(packet, *, show_json: bool, output_result=None) -> str:
+def format_application_packet_summary(
+    packet,
+    *,
+    show_json: bool,
+    output_result=None,
+    drive_result=None,
+) -> str:
     """Format an application packet preview."""
     lines = [
         "Application packet draft",
@@ -695,6 +747,11 @@ def format_application_packet_summary(packet, *, show_json: bool, output_result=
             lines.append("Output warnings")
             for warning in output_result.warnings:
                 lines.append(f" - {warning}")
+    if drive_result:
+        lines.append(f"Drive folder: {drive_result.folder_url}")
+        lines.append("Uploaded files")
+        for item in drive_result.files:
+            lines.append(f" - {item.get('name', '')}")
     if packet.audit_notes:
         lines.append("Audit notes")
         lines.extend(f" - {note}" for note in packet.audit_notes)
