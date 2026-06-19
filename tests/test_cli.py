@@ -257,12 +257,83 @@ def test_format_news_scan_summary_hides_titles_by_default():
         source_pack_name="demo",
         source_summary={"impactalpha_eml": 1, "deduped_total": 1},
         signals=[signal],
+        health_results=[],
         show_details=False,
         limit=10,
     )
 
     assert "Private newsletter title" not in summary
     assert "Details hidden" in summary
+
+
+def test_scan_news_health_check_uses_source_pack_health(monkeypatch):
+    from career_agent.sources.news import SourceHealthResult
+
+    captured = {}
+
+    def fake_health(source_pack, *, user_agent):
+        captured["user_agent"] = user_agent
+        return [
+            SourceHealthResult(
+                name="ImpactAlpha",
+                url="https://impactalpha.com/feed/",
+                source_group="rss_feeds",
+                ok=True,
+                status_code=200,
+                item_count=10,
+            )
+        ]
+
+    monkeypatch.setenv("IMPACT_CAREER_USER_AGENT", "ImpactCareerAgent test@example.com")
+    monkeypatch.setattr("career_agent.cli.main.check_source_pack_health", fake_health)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["scan-news", "--health-check"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "health_ok: 1" in text
+    assert "Source health" in text
+    assert "ImpactAlpha" in text
+    assert captured["user_agent"] == "ImpactCareerAgent test@example.com"
+
+
+def test_scan_news_scores_signals_with_mock_provider(monkeypatch):
+    from career_agent.core import Signal
+
+    monkeypatch.setattr(
+        "career_agent.cli.main.parse_impactalpha_newsletter_eml",
+        lambda raw: [
+            Signal(
+                source="ImpactAlpha",
+                title=f"Fund closes vehicle {index}",
+                signal_subtype="fund_close",
+            )
+            for index in range(7)
+        ],
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-news",
+                "--impactalpha-eml",
+                "examples/sample_data/job_posting.md",
+                "--score",
+                "--max-signals",
+                "6",
+                "--show-details",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "top_signals: 5" in text
+    assert "signals_selected: 6" in text
+    assert "deduped_total: 5" in text
+    assert text.count("Fund closes vehicle") == 5
 
 
 def test_scan_jobs_can_score_with_mock_provider():

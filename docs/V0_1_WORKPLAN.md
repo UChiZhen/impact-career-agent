@@ -171,12 +171,15 @@ Implemented:
 - configurable ImpactAlpha sender/query overrides for forwarded newsletters
 - deterministic signal classification for fund launches, fund closes,
   LP commitments, transactions, programs, and macro tailwinds
+- source health checks for RSS, web, and regulatory source-pack entries
+- career-oriented LLM signal scoring adapted from the legacy `daily_news`
+  scoring idea
 - `career-agent scan-news` with safe default output
 
 Next:
 
-- add SEC Form D / EDGAR experimental source
-- score signals with Gemini/OpenAI against a user watchlist
+- add SEC Form D / EDGAR experimental parser
+- score signals with user watchlist context
 - merge top capital signals into the daily email digest
 
 ### Step 7: OSS readiness

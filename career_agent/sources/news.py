@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import re
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
@@ -50,6 +51,19 @@ class NewsSourcePack:
     rss_feeds: tuple[NewsFeedConfig, ...]
     web_sources: tuple[dict[str, str], ...] = ()
     regulatory_sources: tuple[dict[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class SourceHealthResult:
+    """Connectivity result for one source-pack entry."""
+
+    name: str
+    url: str
+    source_group: str
+    ok: bool
+    status_code: int | None = None
+    item_count: int | None = None
+    error: str = ""
 
 
 @dataclass(frozen=True)
@@ -265,6 +279,110 @@ def load_news_source_pack(path: Path = DEFAULT_NEWS_SOURCE_PACK) -> NewsSourcePa
         web_sources=tuple(dict(item) for item in data.get("web_sources", [])),
         regulatory_sources=tuple(dict(item) for item in data.get("regulatory_sources", [])),
     )
+
+
+def check_source_pack_health(
+    source_pack: NewsSourcePack,
+    *,
+    timeout_seconds: int = 20,
+    user_agent: str = "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
+) -> list[SourceHealthResult]:
+    """Check whether configured public sources are reachable.
+
+    RSS feeds are fetched and parsed so we can report item counts. Web and
+    regulatory entries are connectivity checks only; they are not parsed or
+    scraped by the v0.1 pipeline.
+    """
+    results: list[SourceHealthResult] = []
+
+    for feed in source_pack.rss_feeds:
+        try:
+            xml_text, status_code = fetch_text_url(
+                feed.url,
+                timeout_seconds=timeout_seconds,
+                user_agent=user_agent,
+            )
+            item_count = len(signals_from_rss_xml(xml_text, feed))
+            results.append(
+                SourceHealthResult(
+                    name=feed.name,
+                    url=feed.url,
+                    source_group="rss_feeds",
+                    ok=item_count > 0,
+                    status_code=status_code,
+                    item_count=item_count,
+                    error="" if item_count > 0 else "rss parsed but returned zero items",
+                )
+            )
+        except Exception as exc:
+            results.append(
+                SourceHealthResult(
+                    name=feed.name,
+                    url=feed.url,
+                    source_group="rss_feeds",
+                    ok=False,
+                    error=short_error(exc),
+                )
+            )
+
+    for source_group, entries in (
+        ("web_sources", source_pack.web_sources),
+        ("regulatory_sources", source_pack.regulatory_sources),
+    ):
+        for entry in entries:
+            url = str(entry.get("url", ""))
+            try:
+                _, status_code = fetch_text_url(
+                    url,
+                    timeout_seconds=timeout_seconds,
+                    user_agent=user_agent,
+                    max_bytes=512,
+                )
+                results.append(
+                    SourceHealthResult(
+                        name=str(entry.get("name", "")),
+                        url=url,
+                        source_group=source_group,
+                        ok=200 <= (status_code or 0) < 400,
+                        status_code=status_code,
+                    )
+                )
+            except Exception as exc:
+                results.append(
+                    SourceHealthResult(
+                        name=str(entry.get("name", "")),
+                        url=url,
+                        source_group=source_group,
+                        ok=False,
+                        error=short_error(exc),
+                    )
+                )
+
+    return results
+
+
+def fetch_text_url(
+    url: str,
+    *,
+    timeout_seconds: int,
+    user_agent: str,
+    max_bytes: int | None = None,
+) -> tuple[str, int | None]:
+    """Fetch text from a URL using stdlib networking."""
+    request = Request(url, headers={"User-Agent": user_agent})
+    with urlopen(request, timeout=timeout_seconds) as response:
+        status_code = getattr(response, "status", None)
+        payload = response.read(max_bytes) if max_bytes else response.read()
+    return payload.decode("utf-8", errors="replace"), status_code
+
+
+def short_error(exc: Exception) -> str:
+    """Return a compact error string suitable for health summaries."""
+    if isinstance(exc, HTTPError):
+        return f"HTTP {exc.code}"
+    if isinstance(exc, URLError):
+        return str(exc.reason)[:120]
+    return str(exc)[:120]
 
 
 def signals_from_rss_xml(xml_text: str, feed: NewsFeedConfig) -> list[Signal]:

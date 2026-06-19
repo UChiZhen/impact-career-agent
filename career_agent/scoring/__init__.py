@@ -9,6 +9,17 @@ from career_agent.scoring.job_fit import (
     score_opportunities,
     score_opportunity,
 )
+from career_agent.scoring.signals import (
+    SIGNAL_SCORING_SYSTEM_PROMPT,
+    apply_signal_score,
+    build_signal_scoring_prompt,
+    mock_signal_score_response,
+    normalize_signal_action,
+    normalize_signal_subtype,
+    score_signal,
+    score_signals,
+    top_signals,
+)
 
 __all__ = [
     "JOB_FIT_SYSTEM_PROMPT",
@@ -18,4 +29,13 @@ __all__ = [
     "normalize_action",
     "score_opportunities",
     "score_opportunity",
+    "SIGNAL_SCORING_SYSTEM_PROMPT",
+    "apply_signal_score",
+    "build_signal_scoring_prompt",
+    "mock_signal_score_response",
+    "normalize_signal_action",
+    "normalize_signal_subtype",
+    "score_signal",
+    "score_signals",
+    "top_signals",
 ]

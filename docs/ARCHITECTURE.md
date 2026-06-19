@@ -146,10 +146,14 @@ examples/source_packs/impact_capital_signals.yaml
 The current implementation includes:
 
 - `RSSNewsSource`: public RSS/Atom feed parsing into `Signal` objects.
+- `check_source_pack_health`: source-pack health checks. RSS feeds are fetched
+  and parsed; web and regulatory entries are connectivity checks.
 - `ImpactAlphaNewsletterSource`: optional Gmail connector for a user's own
   ImpactAlpha subscription.
 - `parse_impactalpha_newsletter_eml`: local `.eml` parser for development
   smoke tests without committing private emails.
+- `score_signals`: LLM-backed career scoring for capital signals, adapted from
+  the legacy `daily_news` idea but focused on concrete job-search actions.
 
 Premium sources such as PitchBook, private newsletters, or paid datasets should
 be integrated through user-owned API/export/newsletter access. The default OSS
@@ -158,6 +162,11 @@ configuration should not scrape paywalled content.
 The ImpactAlpha Gmail source supports configurable sender and query templates
 so forwarded newsletters and user-created Gmail labels can be handled without a
 code change. Query templates may use `{sender}` and `{after_date}` placeholders.
+
+Signal scoring returns fields such as `relevance_score`, `confidence`,
+`entities`, `geography`, `sector`, `capital_amount`, `career_hypothesis`, and
+`suggested_action`. Top signals are sorted for digest display, defaulting to
+five items.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local

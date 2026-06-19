@@ -7,6 +7,8 @@ from career_agent.sources.news import (
     IMPACTALPHA_SENDER,
     ImpactAlphaNewsletterConfig,
     NewsFeedConfig,
+    NewsSourcePack,
+    check_source_pack_health,
     classify_capital_signal,
     load_news_source_pack,
     parse_impactalpha_gmail_payload,
@@ -54,6 +56,42 @@ def test_signals_from_rss_xml_enriches_capital_signal():
     assert signals[0].signal_subtype == "fund_close"
     assert signals[0].suggested_action == "rescan_org_jobs"
     assert signals[0].metadata["vertical"] == "climate_finance"
+
+
+def test_check_source_pack_health_parses_rss_and_checks_metadata_urls(monkeypatch):
+    source_pack = NewsSourcePack(
+        name="demo",
+        verticals=("impact_investing",),
+        rss_feeds=(
+            NewsFeedConfig(name="Demo RSS", url="https://example.org/feed.xml"),
+        ),
+        web_sources=({"name": "Demo Web", "url": "https://example.org"},),
+        regulatory_sources=({"name": "Demo SEC", "url": "https://sec.example.org"},),
+    )
+    xml = """
+    <rss>
+      <channel>
+        <item>
+          <title>Fund closes new vehicle</title>
+          <link>https://example.org/item</link>
+        </item>
+      </channel>
+    </rss>
+    """
+
+    def fake_fetch(url, *, timeout_seconds, user_agent, max_bytes=None):
+        if url.endswith("feed.xml"):
+            return xml, 200
+        return "<html>ok</html>", 200
+
+    monkeypatch.setattr("career_agent.sources.news.fetch_text_url", fake_fetch)
+
+    results = check_source_pack_health(source_pack)
+
+    assert len(results) == 3
+    assert all(result.ok for result in results)
+    assert results[0].source_group == "rss_feeds"
+    assert results[0].item_count == 1
 
 
 def test_parse_impactalpha_newsletter_html_extracts_content_links():

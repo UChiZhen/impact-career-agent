@@ -126,6 +126,17 @@ calling the network. Fetch public RSS feeds only when explicitly requested:
 career-agent scan-news --rss-live
 ```
 
+Check all public source-pack URLs before relying on them:
+
+```bash
+career-agent scan-news --health-check \
+  --user-agent 'ImpactCareerAgent/0.1 contact: you@example.com'
+```
+
+RSS sources are fetched and parsed. Web and regulatory sources are checked for
+connectivity only. Some SEC pages require a User-Agent with contact
+information; this can also be provided with `IMPACT_CAREER_USER_AGENT`.
+
 ImpactAlpha newsletter parsing is supported through a local `.eml` sample for
 development smoke tests or through Gmail for users with their own subscription:
 
@@ -147,6 +158,16 @@ career-agent scan-news --impactalpha-email-live \
 
 By default, `scan-news` hides signal titles. Use `--show-details` only when you
 explicitly want article/deal titles in the terminal.
+
+Score scanned signals for career-search value with a local mock provider or
+Gemini:
+
+```bash
+career-agent scan-news --rss-live --score --score-provider mock
+career-agent scan-news --rss-live --score --score-provider gemini --max-signals 3
+```
+
+Scored signals are ranked for digest use, with `--top-signals 5` as the default.
 
 The live LinkedIn email source preserves the working Gmail flow from the
 original `linkedin_email` project:
@@ -318,6 +339,7 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Port live job discovery modules.
 - [x] Add unified job scan scoring and Gmail digest sending.
 - [x] Add public capital-signal source pack and ImpactAlpha newsletter parser.
+- [x] Add source health checks and career-oriented signal scoring.
 - [ ] Port application document generation.
 - [ ] Add tests and CI.
 - [ ] Tag `v0.1.0`.

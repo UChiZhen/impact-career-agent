@@ -17,6 +17,11 @@ from career_agent.demo import (
 )
 from career_agent.llm import GeminiProvider, MockLLMProvider
 from career_agent.scoring.job_fit import score_opportunities
+from career_agent.scoring.signals import (
+    mock_signal_score_response,
+    score_signals,
+    top_signals,
+)
 from career_agent.sinks.email import GmailEmailSender, config_from_env
 from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
@@ -33,6 +38,7 @@ from career_agent.sources.news import (
     ImpactAlphaNewsletterSource,
     RSSNewsSource,
     RSSNewsSourceConfig,
+    check_source_pack_health,
     load_news_source_pack,
     parse_impactalpha_newsletter_eml,
 )
@@ -162,6 +168,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fetch live public RSS feeds from the source pack.",
     )
     news_parser.add_argument(
+        "--health-check",
+        action="store_true",
+        help="Check all source-pack URLs. RSS feeds are parsed; web/regulatory sources are connectivity checks.",
+    )
+    news_parser.add_argument(
+        "--user-agent",
+        help=(
+            "User-Agent for live RSS/health checks. SEC sources may require a "
+            "contact email; can also be set with IMPACT_CAREER_USER_AGENT."
+        ),
+    )
+    news_parser.add_argument(
         "--impactalpha-eml",
         help="Local ImpactAlpha .eml file to parse for development smoke tests.",
     )
@@ -198,6 +216,33 @@ def build_parser() -> argparse.ArgumentParser:
         "--show-details",
         action="store_true",
         help="Print signal titles and suggested actions.",
+    )
+    news_parser.add_argument(
+        "--score",
+        action="store_true",
+        help="Score scanned signals for career-search value.",
+    )
+    news_parser.add_argument(
+        "--max-signals",
+        type=int,
+        help="Maximum signals to score after fetching. Useful for live LLM smoke tests.",
+    )
+    news_parser.add_argument(
+        "--score-provider",
+        choices=("mock", "gemini"),
+        default="mock",
+        help="Provider to use when --score is enabled.",
+    )
+    news_parser.add_argument(
+        "--candidate-profile",
+        default="examples/sample_data/candidate_profile.yaml",
+        help="Candidate profile YAML used for signal scoring.",
+    )
+    news_parser.add_argument(
+        "--top-signals",
+        type=int,
+        default=5,
+        help="Number of scored signals to keep for digest-style display.",
     )
     news_parser.add_argument(
         "--limit",
@@ -477,9 +522,27 @@ def run_news_scan(args: argparse.Namespace) -> str:
         "source_pack_web_sources": len(source_pack.web_sources),
         "source_pack_regulatory_sources": len(source_pack.regulatory_sources),
     }
+    health_results = []
+
+    if args.health_check:
+        health_results = check_source_pack_health(
+            source_pack,
+            user_agent=args.user_agent
+            or os.getenv("IMPACT_CAREER_USER_AGENT")
+            or "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
+        )
+        source_summary["health_ok"] = sum(1 for result in health_results if result.ok)
+        source_summary["health_failed"] = sum(1 for result in health_results if not result.ok)
 
     if args.rss_live:
-        rss_signals = RSSNewsSource(RSSNewsSourceConfig(feeds=source_pack.rss_feeds)).fetch()
+        rss_signals = RSSNewsSource(
+            RSSNewsSourceConfig(
+                feeds=source_pack.rss_feeds,
+                user_agent=args.user_agent
+                or os.getenv("IMPACT_CAREER_USER_AGENT")
+                or "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
+            )
+        ).fetch()
         signals.extend(rss_signals)
         source_summary["rss_news"] = len(rss_signals)
 
@@ -503,14 +566,50 @@ def run_news_scan(args: argparse.Namespace) -> str:
         signals.extend(impactalpha_signals)
         source_summary["impactalpha_email"] = len(impactalpha_signals)
 
+    if args.max_signals is not None:
+        signals = signals[: args.max_signals]
+        source_summary["signals_selected"] = len(signals)
+
+    if args.score and signals:
+        candidate = load_candidate_profile(Path(args.candidate_profile))
+        provider = signal_scoring_provider_from_args(args, signals)
+        signals = score_signals(signals, provider, candidate=candidate)
+        source_summary.update(signal_score_summary(signals))
+        signals = top_signals(signals, limit=args.top_signals)
+        source_summary["top_signals"] = len(signals)
+
     source_summary["deduped_total"] = len({signal.dedup_key for signal in signals})
     return format_news_scan_summary(
         source_pack_name=source_pack.name,
         source_summary=source_summary,
         signals=signals,
+        health_results=health_results,
         show_details=args.show_details,
         limit=args.limit,
     )
+
+
+def signal_scoring_provider_from_args(args: argparse.Namespace, signals):
+    """Build the selected signal scoring provider."""
+    if args.score_provider == "gemini":
+        return GeminiProvider()
+    return MockLLMProvider(default_response=mock_signal_score_response(signals))
+
+
+def signal_score_summary(signals) -> dict[str, int]:
+    """Summarize scored signal action bands."""
+    counts = {
+        "signal_action_rescan_org_jobs": 0,
+        "signal_action_add_to_watchlist": 0,
+        "signal_action_search_linkedin": 0,
+        "signal_action_review_keywords": 0,
+        "signal_action_ignore": 0,
+    }
+    for signal in signals:
+        key = f"signal_action_{signal.suggested_action or 'review_keywords'}"
+        if key in counts:
+            counts[key] += 1
+    return counts
 
 
 def format_news_scan_summary(
@@ -518,6 +617,7 @@ def format_news_scan_summary(
     source_pack_name: str,
     source_summary: dict[str, int],
     signals,
+    health_results,
     show_details: bool,
     limit: int,
 ) -> str:
@@ -525,6 +625,20 @@ def format_news_scan_summary(
     lines = ["News signal scan", f"Source pack: {source_pack_name}"]
     for key, value in source_summary.items():
         lines.append(f"{key}: {value}")
+
+    if health_results:
+        lines.append("")
+        lines.append("Source health")
+        for result in health_results:
+            status = "ok" if result.ok else "fail"
+            detail = ""
+            if result.item_count is not None:
+                detail = f" items={result.item_count}"
+            elif result.status_code is not None:
+                detail = f" status={result.status_code}"
+            elif result.error:
+                detail = f" error={result.error}"
+            lines.append(f" - {status}: [{result.source_group}] {result.name}{detail}")
 
     if show_details and signals:
         lines.append("")
