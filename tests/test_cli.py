@@ -662,6 +662,7 @@ def test_draft_application_drive_output_uses_drive_sink(monkeypatch):
                 "~/credentials.json",
                 "--token-path",
                 "~/token.json",
+                "--replace-existing",
             ]
         )
 
@@ -670,6 +671,7 @@ def test_draft_application_drive_output_uses_drive_sink(monkeypatch):
     assert calls["local"]["debug_output"] is False
     assert calls["drive_config"].root_folder_name == "Impact Career Agent"
     assert calls["drive_config"].applications_folder_name == "Applications"
+    assert calls["drive_config"].replace_existing is True
     assert calls["drive_upload"]["files"] == [
         "resume.docx",
         "cover_letter.docx",

@@ -208,6 +208,8 @@ Impact Career Agent/
 
 Use `--output both` to keep the same packet locally and in Drive. Debug JSON/TXT
 files remain local-only and are not uploaded to Drive.
+For recurring automation, add `--replace-existing` to update files with the same
+names in the packet folder instead of uploading duplicates.
 
 Power users who keep an application tracker in Google Sheets can also append a
 status row after packet generation:

@@ -5,7 +5,9 @@ from career_agent.sinks.google_drive import (
     GoogleDrivePacketSink,
     ensure_drive_folder,
     escape_drive_query_value,
+    find_drive_file,
     should_upload_to_drive,
+    upload_drive_file,
 )
 
 
@@ -66,7 +68,7 @@ def test_drive_packet_sink_creates_folder_tree_and_uploads_filtered_files(tmp_pa
     )
     uploaded = []
 
-    def fake_upload(service_arg, path, *, parent_id):
+    def fake_upload(service_arg, path, *, parent_id, replace_existing=False):
         uploaded.append({"name": path.name, "parent_id": parent_id})
         return {"id": f"file-{len(uploaded)}", "name": path.name, "url": "https://drive/file"}
 
@@ -94,15 +96,62 @@ def test_drive_packet_sink_creates_folder_tree_and_uploads_filtered_files(tmp_pa
     ]
 
 
+def test_find_drive_file_queries_name_and_parent():
+    service = FakeDriveService(
+        list_results=[
+            {"files": [{"id": "file-1", "name": "resume.docx"}]},
+        ]
+    )
+
+    found = find_drive_file(service, name="resume.docx", parent_id="folder-1")
+
+    assert found["id"] == "file-1"
+    assert "name = 'resume.docx'" in service.list_requests[0]["q"]
+    assert "'folder-1' in parents" in service.list_requests[0]["q"]
+
+
+def test_upload_drive_file_replaces_existing_file(tmp_path, monkeypatch):
+    path = tmp_path / "resume.docx"
+    path.write_text("doc", encoding="utf-8")
+    service = FakeDriveService(
+        list_results=[
+            {"files": [{"id": "file-1", "name": "resume.docx"}]},
+        ]
+    )
+
+    class FakeMediaFileUpload:
+        def __init__(self, filename, resumable=False):
+            self.filename = filename
+            self.resumable = resumable
+
+    monkeypatch.setattr("googleapiclient.http.MediaFileUpload", FakeMediaFileUpload)
+
+    result = upload_drive_file(
+        service,
+        path,
+        parent_id="folder-1",
+        replace_existing=True,
+    )
+
+    assert result["id"] == "file-1"
+    assert result["action"] == "updated"
+    assert not service.created
+    assert service.updated[0]["fileId"] == "file-1"
+    assert service.updated[0]["body"] == {"name": "resume.docx"}
+
+
 class FakeDriveService:
     def __init__(self, list_results):
         self.list_results = list(list_results)
+        self.list_requests = []
         self.created = []
+        self.updated = []
 
     def files(self):
         return self
 
     def list(self, **kwargs):
+        self.list_requests.append(kwargs)
         self.last_list = kwargs
         return FakeExecute(self.list_results.pop(0))
 
@@ -122,6 +171,17 @@ class FakeDriveService:
                 "webViewLink": "https://drive/file",
             }
         return FakeExecute(payload)
+
+    def update(self, **kwargs):
+        self.updated.append(kwargs)
+        return FakeExecute(
+            {
+                "id": kwargs["fileId"],
+                "name": kwargs["body"]["name"],
+                "webViewLink": "https://drive/file",
+                "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            }
+        )
 
 
 class FakeExecute:

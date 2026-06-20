@@ -166,6 +166,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Google Drive subfolder under the root folder.",
     )
     application_parser.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Update existing Drive files with the same names instead of uploading duplicates.",
+    )
+    application_parser.add_argument(
         "--tracker-sheet-id",
         help="Optional Google Sheet ID for application tracker write-back.",
     )
@@ -630,6 +635,7 @@ def upload_application_packet_to_drive(args: argparse.Namespace, output_result):
             token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
             root_folder_name=args.drive_root_folder,
             applications_folder_name=args.drive_applications_folder,
+            replace_existing=args.replace_existing,
         )
     )
     return sink.upload_packet_folder(output_result.folder, output_result.files)
@@ -799,7 +805,9 @@ def format_application_packet_summary(
         lines.append(f"Drive folder: {drive_result.folder_url}")
         lines.append("Uploaded files")
         for item in drive_result.files:
-            lines.append(f" - {item.get('name', '')}")
+            action = item.get("action")
+            suffix = f" ({action})" if action else ""
+            lines.append(f" - {item.get('name', '')}{suffix}")
     if tracker_result:
         lines.append(
             f"Tracker row: {tracker_result.sheet_name} "

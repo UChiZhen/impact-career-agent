@@ -20,6 +20,7 @@ class GoogleDriveConfig:
     token_path: str | None = None
     root_folder_name: str = "Impact Career Agent"
     applications_folder_name: str = "Applications"
+    replace_existing: bool = False
 
 
 @dataclass
@@ -60,7 +61,12 @@ class GoogleDrivePacketSink:
             parent_id=applications_id,
         )
         uploaded_files = [
-            upload_drive_file(service, Path(file_path), parent_id=packet_folder_id)
+            upload_drive_file(
+                service,
+                Path(file_path),
+                parent_id=packet_folder_id,
+                replace_existing=self.config.replace_existing,
+            )
             for file_path in files
             if should_upload_to_drive(Path(file_path))
         ]
@@ -176,7 +182,41 @@ def find_drive_folder(
     return files[0] if files else None
 
 
-def upload_drive_file(service: Any, path: Path, *, parent_id: str) -> dict[str, str]:
+def find_drive_file(
+    service: Any,
+    *,
+    name: str,
+    parent_id: str,
+) -> dict[str, str] | None:
+    """Find a Drive file by exact name and parent."""
+    query = [
+        f"name = '{escape_drive_query_value(name)}'",
+        f"'{escape_drive_query_value(parent_id)}' in parents",
+        "trashed = false",
+    ]
+    result = (
+        service.files()
+        .list(
+            q=" and ".join(query),
+            spaces="drive",
+            fields="files(id,name,webViewLink,mimeType)",
+            pageSize=1,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+    files = result.get("files", [])
+    return files[0] if files else None
+
+
+def upload_drive_file(
+    service: Any,
+    path: Path,
+    *,
+    parent_id: str,
+    replace_existing: bool = False,
+) -> dict[str, str]:
     """Upload one local file to Drive."""
     try:
         from googleapiclient.http import MediaFileUpload
@@ -185,21 +225,43 @@ def upload_drive_file(service: Any, path: Path, *, parent_id: str) -> dict[str, 
             "Google Drive uploads require google-api-python-client."
         ) from exc
 
-    uploaded = (
-        service.files()
-        .create(
-            body={"name": path.name, "parents": [parent_id]},
-            media_body=MediaFileUpload(str(path), resumable=False),
-            fields="id,name,webViewLink,mimeType",
-            supportsAllDrives=True,
-        )
-        .execute()
+    media_body = MediaFileUpload(str(path), resumable=False)
+    existing = (
+        find_drive_file(service, name=path.name, parent_id=parent_id)
+        if replace_existing
+        else None
     )
+    if existing:
+        uploaded = (
+            service.files()
+            .update(
+                fileId=existing["id"],
+                body={"name": path.name},
+                media_body=media_body,
+                fields="id,name,webViewLink,mimeType",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+        action = "updated"
+    else:
+        uploaded = (
+            service.files()
+            .create(
+                body={"name": path.name, "parents": [parent_id]},
+                media_body=media_body,
+                fields="id,name,webViewLink,mimeType",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+        action = "created"
     return {
         "id": uploaded.get("id", ""),
         "name": uploaded.get("name", path.name),
         "url": uploaded.get("webViewLink", drive_file_url(uploaded.get("id", ""))),
         "mime_type": uploaded.get("mimeType", ""),
+        "action": action,
     }
 
 
