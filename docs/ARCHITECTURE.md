@@ -255,8 +255,9 @@ should not be uploaded to Drive by default.
 Application tracker write-back appends one row to a user-provided Google Sheet.
 The default tab is `Application Tracker`; the schema includes packet metadata,
 company, role, location, fit score, recommended action, Drive folder URL,
-user-facing file names, job URL, and source. This is an opt-in sink and should
-not be required for local-first onboarding.
+user-facing file names, job URL, and source. The tab is created when missing,
+and an empty header row is initialized automatically. This is an opt-in sink and
+should not be required for local-first onboarding.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local

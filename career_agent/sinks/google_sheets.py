@@ -73,6 +73,7 @@ class GoogleSheetsApplicationTracker:
     ) -> TrackerWriteResult:
         """Ensure headers and append one application tracker row."""
         service = service or self.build_sheets_service()
+        ensure_sheet_exists(service, self.config)
         ensure_application_tracker_header(service, self.config)
         row = application_tracker_row(
             packet,
@@ -153,6 +154,32 @@ class GoogleSheetsApplicationTracker:
         token_path.parent.mkdir(parents=True, exist_ok=True)
         token_path.write_text(credentials.to_json(), encoding="utf-8")
         return credentials
+
+
+def ensure_sheet_exists(service: Any, config: GoogleSheetsTrackerConfig) -> None:
+    """Create the tracker tab when it is missing."""
+    result = (
+        service.spreadsheets()
+        .get(
+            spreadsheetId=config.spreadsheet_id,
+            fields="sheets(properties(title))",
+        )
+        .execute()
+    )
+    titles = {
+        sheet.get("properties", {}).get("title")
+        for sheet in result.get("sheets", [])
+    }
+    if config.sheet_name in titles:
+        return
+    (
+        service.spreadsheets()
+        .batchUpdate(
+            spreadsheetId=config.spreadsheet_id,
+            body={"requests": [{"addSheet": {"properties": {"title": config.sheet_name}}}]},
+        )
+        .execute()
+    )
 
 
 def ensure_application_tracker_header(service: Any, config: GoogleSheetsTrackerConfig) -> None:

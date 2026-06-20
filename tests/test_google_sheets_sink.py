@@ -7,6 +7,7 @@ from career_agent.sinks.google_sheets import (
     GoogleSheetsTrackerConfig,
     application_tracker_row,
     ensure_application_tracker_header,
+    ensure_sheet_exists,
     quote_sheet_name,
 )
 
@@ -81,8 +82,38 @@ def test_ensure_application_tracker_header_keeps_existing_header():
     assert not service.update_requests
 
 
+def test_ensure_sheet_exists_creates_missing_tracker_tab():
+    service = FakeSheetsService(header_values=[], sheet_titles=["Sheet1"])
+    config = GoogleSheetsTrackerConfig(spreadsheet_id="sheet-1")
+
+    ensure_sheet_exists(service, config)
+
+    assert service.batch_update_requests == [
+        {
+            "spreadsheetId": "sheet-1",
+            "body": {
+                "requests": [
+                    {"addSheet": {"properties": {"title": "Application Tracker"}}}
+                ]
+            },
+        }
+    ]
+
+
+def test_ensure_sheet_exists_reuses_existing_tracker_tab():
+    service = FakeSheetsService(header_values=[], sheet_titles=["Application Tracker"])
+    config = GoogleSheetsTrackerConfig(spreadsheet_id="sheet-1")
+
+    ensure_sheet_exists(service, config)
+
+    assert not service.batch_update_requests
+
+
 def test_google_sheets_application_tracker_appends_packet_row():
-    service = FakeSheetsService(header_values=[["created_at", "packet_id"]])
+    service = FakeSheetsService(
+        header_values=[["created_at", "packet_id"]],
+        sheet_titles=["Applications"],
+    )
     config = GoogleSheetsTrackerConfig(
         spreadsheet_id="sheet-1",
         sheet_name="Applications",
@@ -101,11 +132,13 @@ def test_google_sheets_application_tracker_appends_packet_row():
 
 
 class FakeSheetsService:
-    def __init__(self, *, header_values):
+    def __init__(self, *, header_values, sheet_titles=None):
         self.header_values = header_values
+        self.sheet_titles = sheet_titles or ["Application Tracker"]
         self.get_requests = []
         self.update_requests = []
         self.append_requests = []
+        self.batch_update_requests = []
 
     def spreadsheets(self):
         return self
@@ -115,7 +148,20 @@ class FakeSheetsService:
 
     def get(self, **kwargs):
         self.get_requests.append(kwargs)
+        if "fields" in kwargs:
+            return FakeExecute(
+                {
+                    "sheets": [
+                        {"properties": {"title": title}}
+                        for title in self.sheet_titles
+                    ]
+                }
+            )
         return FakeExecute({"values": self.header_values})
+
+    def batchUpdate(self, **kwargs):
+        self.batch_update_requests.append(kwargs)
+        return FakeExecute({"replies": [{"addSheet": {"properties": {"sheetId": 1}}}]})
 
     def update(self, **kwargs):
         self.update_requests.append(kwargs)

@@ -220,9 +220,11 @@ career-agent draft-application \
   --token-path ~/path/to/token.json
 ```
 
-The tracker tab defaults to `Application Tracker` and records packet metadata,
-fit score, recommended action, Drive folder URL, user-facing filenames, job URL,
-and source. Set `GOOGLE_APPLICATION_TRACKER_SHEET_ID` for unattended runs.
+The tracker tab defaults to `Application Tracker`; it is created when missing,
+and an empty header row is initialized automatically. It records packet
+metadata, fit score, recommended action, Drive folder URL, user-facing
+filenames, job URL, and source. Set `GOOGLE_APPLICATION_TRACKER_SHEET_ID` for
+unattended runs.
 
 Use Gemini explicitly when you want a live LLM draft:
 
