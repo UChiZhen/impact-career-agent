@@ -231,7 +231,9 @@ Application material storage should stay pluggable:
 - local DOCX packet rendering for user-facing resume and cover-letter files.
 - optional Google Drive output folders under `Impact Career Agent/Applications`
   for users who want cloud persistence.
-- optional Google Sheet write-back for status tracking and packet links.
+- optional Google Sheet write-back for status tracking and packet links, aimed
+  at users who already maintain an application tracker or are comfortable with
+  Google authentication.
 - optional email attachments or links after the user explicitly enables a mail
   sink.
 
@@ -249,6 +251,12 @@ Drive packet uploads should include only user-facing artifacts: DOCX, available
 PDFs, and `manifest.json`. Local debug files such as `resume.json`,
 `cover_letter.json`, and `audit_notes.txt` are useful during development but
 should not be uploaded to Drive by default.
+
+Application tracker write-back appends one row to a user-provided Google Sheet.
+The default tab is `Application Tracker`; the schema includes packet metadata,
+company, role, location, fit score, recommended action, Drive folder URL,
+user-facing file names, job URL, and source. This is an opt-in sink and should
+not be required for local-first onboarding.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local

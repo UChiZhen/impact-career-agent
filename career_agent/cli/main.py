@@ -32,6 +32,10 @@ from career_agent.scoring.signals import (
 )
 from career_agent.sinks.email import GmailEmailSender, config_from_env
 from career_agent.sinks.google_drive import GoogleDriveConfig, GoogleDrivePacketSink
+from career_agent.sinks.google_sheets import (
+    GoogleSheetsApplicationTracker,
+    GoogleSheetsTrackerConfig,
+)
 from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
@@ -160,6 +164,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--drive-applications-folder",
         default="Applications",
         help="Google Drive subfolder under the root folder.",
+    )
+    application_parser.add_argument(
+        "--tracker-sheet-id",
+        help="Optional Google Sheet ID for application tracker write-back.",
+    )
+    application_parser.add_argument(
+        "--tracker-sheet-name",
+        default="Application Tracker",
+        help="Google Sheet tab name for application tracker write-back.",
     )
 
     email_parser = subparsers.add_parser(
@@ -576,6 +589,7 @@ def run_application_draft(args: argparse.Namespace) -> str:
     packet = generate_application_packet(opportunity, candidate, provider)
     output_result = None
     drive_result = None
+    tracker_result = None
     if args.output in {"local", "both"}:
         output_result = LocalApplicationPacketSink(
             root_dir=Path(args.output_dir),
@@ -593,11 +607,18 @@ def run_application_draft(args: argparse.Namespace) -> str:
                     debug_output=False,
                 ).save(packet, candidate)
                 drive_result = upload_application_packet_to_drive(args, transient_result)
+    tracker_result = write_application_tracker_if_requested(
+        args,
+        packet,
+        output_result=output_result,
+        drive_result=drive_result,
+    )
     return format_application_packet_summary(
         packet,
         show_json=args.show_json,
         output_result=output_result,
         drive_result=drive_result,
+        tracker_result=tracker_result,
     )
 
 
@@ -612,6 +633,32 @@ def upload_application_packet_to_drive(args: argparse.Namespace, output_result):
         )
     )
     return sink.upload_packet_folder(output_result.folder, output_result.files)
+
+
+def write_application_tracker_if_requested(
+    args: argparse.Namespace,
+    packet,
+    *,
+    output_result=None,
+    drive_result=None,
+):
+    """Append packet metadata to a Google Sheet when configured."""
+    spreadsheet_id = args.tracker_sheet_id or os.getenv("GOOGLE_APPLICATION_TRACKER_SHEET_ID")
+    if not spreadsheet_id:
+        return None
+    tracker = GoogleSheetsApplicationTracker(
+        GoogleSheetsTrackerConfig(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=args.tracker_sheet_name,
+            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
+        )
+    )
+    return tracker.write_packet(
+        packet,
+        output_result=output_result,
+        drive_result=drive_result,
+    )
 
 
 def load_master_resume(path: Path) -> dict:
@@ -727,6 +774,7 @@ def format_application_packet_summary(
     show_json: bool,
     output_result=None,
     drive_result=None,
+    tracker_result=None,
 ) -> str:
     """Format an application packet preview."""
     lines = [
@@ -752,6 +800,11 @@ def format_application_packet_summary(
         lines.append("Uploaded files")
         for item in drive_result.files:
             lines.append(f" - {item.get('name', '')}")
+    if tracker_result:
+        lines.append(
+            f"Tracker row: {tracker_result.sheet_name} "
+            f"({tracker_result.rows_written} row)"
+        )
     if packet.audit_notes:
         lines.append("Audit notes")
         lines.extend(f" - {note}" for note in packet.audit_notes)

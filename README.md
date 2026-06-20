@@ -151,8 +151,9 @@ cover letter JSON
 audit notes
 ```
 
-The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX,
-PDF, PNG rendering and Google Sheet write-back are planned follow-up modules.
+The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX
+rendering, optional PDF rendering, Google Drive upload, and Google Sheet
+write-back are available as opt-in output sinks.
 Generated application materials stay local by default in v0.1. Future storage
 sinks should be opt-in, for example Google Drive folders, Google Sheet status
 updates, or emailed links/attachments, so users are not forced into Google
@@ -207,6 +208,21 @@ Impact Career Agent/
 
 Use `--output both` to keep the same packet locally and in Drive. Debug JSON/TXT
 files remain local-only and are not uploaded to Drive.
+
+Power users who keep an application tracker in Google Sheets can also append a
+status row after packet generation:
+
+```bash
+career-agent draft-application \
+  --output drive \
+  --tracker-sheet-id your-google-sheet-id \
+  --credentials-path ~/path/to/credentials.json \
+  --token-path ~/path/to/token.json
+```
+
+The tracker tab defaults to `Application Tracker` and records packet metadata,
+fit score, recommended action, Drive folder URL, user-facing filenames, job URL,
+and source. Set `GOOGLE_APPLICATION_TRACKER_SHEET_ID` for unattended runs.
 
 Use Gemini explicitly when you want a live LLM draft:
 

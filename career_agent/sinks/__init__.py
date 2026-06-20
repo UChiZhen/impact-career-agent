@@ -12,6 +12,11 @@ from career_agent.sinks.google_drive import (
     GoogleDrivePacketSink,
     GoogleDriveUploadResult,
 )
+from career_agent.sinks.google_sheets import (
+    GoogleSheetsApplicationTracker,
+    GoogleSheetsTrackerConfig,
+    TrackerWriteResult,
+)
 
 __all__ = [
     "GmailEmailSender",
@@ -19,6 +24,9 @@ __all__ = [
     "GoogleDriveConfig",
     "GoogleDrivePacketSink",
     "GoogleDriveUploadResult",
+    "GoogleSheetsApplicationTracker",
+    "GoogleSheetsTrackerConfig",
+    "TrackerWriteResult",
     "build_digest_subject",
     "config_from_env",
     "render_job_digest",

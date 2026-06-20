@@ -676,3 +676,74 @@ def test_draft_application_drive_output_uses_drive_sink(monkeypatch):
         "manifest.json",
     ]
     assert "Drive folder: https://drive.google.com/drive/folders/folder-1" in output.getvalue()
+
+
+def test_draft_application_tracker_sheet_writeback(monkeypatch):
+    calls = {}
+
+    class FakeLocalSink:
+        def __init__(self, root_dir, render_pdf=False, debug_output=False):
+            self.root_dir = Path(root_dir)
+
+        def save(self, packet, candidate):
+            folder = self.root_dir / "packet-folder"
+            return SimpleNamespace(
+                folder=folder,
+                files=[
+                    folder / "resume.docx",
+                    folder / "cover_letter.docx",
+                    folder / "manifest.json",
+                ],
+                warnings=[],
+            )
+
+    class FakeDriveSink:
+        def __init__(self, config):
+            self.config = config
+
+        def upload_packet_folder(self, folder, files):
+            return SimpleNamespace(
+                folder_url="https://drive.google.com/drive/folders/folder-1",
+                files=[
+                    {"name": "resume.docx"},
+                    {"name": "cover_letter.docx"},
+                    {"name": "manifest.json"},
+                ],
+            )
+
+    class FakeTracker:
+        def __init__(self, config):
+            calls["tracker_config"] = config
+
+        def write_packet(self, packet, *, output_result=None, drive_result=None):
+            calls["tracker_packet"] = packet.packet_id
+            calls["tracker_drive_url"] = drive_result.folder_url
+            return SimpleNamespace(sheet_name="Application Tracker", rows_written=1)
+
+    monkeypatch.setattr("career_agent.cli.main.LocalApplicationPacketSink", FakeLocalSink)
+    monkeypatch.setattr("career_agent.cli.main.GoogleDrivePacketSink", FakeDriveSink)
+    monkeypatch.setattr("career_agent.cli.main.GoogleSheetsApplicationTracker", FakeTracker)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "draft-application",
+                "--output",
+                "drive",
+                "--credentials-path",
+                "~/credentials.json",
+                "--token-path",
+                "~/token.json",
+                "--tracker-sheet-id",
+                "sheet-123",
+            ]
+        )
+
+    assert exit_code == 0
+    assert calls["tracker_config"].spreadsheet_id == "sheet-123"
+    assert calls["tracker_config"].sheet_name == "Application Tracker"
+    assert calls["tracker_config"].credentials_path == "~/credentials.json"
+    assert calls["tracker_config"].token_path == "~/token.json"
+    assert calls["tracker_drive_url"] == "https://drive.google.com/drive/folders/folder-1"
+    assert "Tracker row: Application Tracker (1 row)" in output.getvalue()

@@ -177,10 +177,13 @@ Implemented:
   local conversion fails
 - added Google Drive packet upload under `Impact Career Agent/Applications`,
   uploading only DOCX/PDF/manifest files
+- added opt-in Google Sheets application tracker write-back for authenticated
+  users
 
 Next:
 
-- run an authenticated Drive smoke test with local credentials
+- run an authenticated tracker Sheet smoke test with local credentials after
+  the maintainer provides a Sheet ID
 - keep real master resumes, generated DOCX/PDF/PNG, and templates out of git
 
 ### Step 6a: Capital signal discovery
