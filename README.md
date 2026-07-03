@@ -154,10 +154,9 @@ audit notes
 The v0.1 implementation keeps this provider-agnostic and fixture-safe. DOCX
 rendering, optional PDF rendering, Google Drive upload, and Google Sheet
 write-back are available as opt-in output sinks.
-Generated application materials stay local by default in v0.1. Future storage
-sinks should be opt-in, for example Google Drive folders, Google Sheet status
-updates, or emailed links/attachments, so users are not forced into Google
-authentication before they need cloud persistence.
+Generated application materials stay local by default in v0.1. Cloud storage
+and tracker write-back are explicit opt-in sinks, so users are not forced into
+Google authentication before they need cloud persistence.
 
 Preview this apply stage without any private resume or API key:
 
@@ -236,6 +235,42 @@ career-agent draft-application \
   --provider gemini \
   --master-resume /path/to/private/master_resume.yaml
 ```
+
+Generate application packets directly from a job scan when you want the full
+daily workflow:
+
+```bash
+career-agent scan-jobs \
+  --config examples/demo_config.yaml \
+  --draft-applications 1
+```
+
+`scan-jobs --draft-applications N` selects the top `apply_now` opportunities
+after scoring and drafts packets for those roles. If the user has not requested
+LLM scoring with `--score`, local fallback scoring is applied first so packet
+generation still has a score, action, and resume angle. The default
+application output is `preview`, which does not write files or call Google
+services.
+
+Authenticated users can keep the same packets in Drive and write tracker rows:
+
+```bash
+career-agent scan-jobs \
+  --env-file /path/to/private/.env \
+  --score \
+  --score-provider gemini \
+  --draft-applications 2 \
+  --application-provider gemini \
+  --application-output drive \
+  --replace-existing \
+  --tracker-sheet-id your-google-sheet-id \
+  --credentials-path ~/path/to/credentials.json \
+  --token-path ~/path/to/token.json
+```
+
+This keeps the v0.1 onboarding ladder intact: demo users can preview the whole
+chain locally, while power users can opt into Drive and Sheets after Google
+OAuth is configured.
 
 News signals from `daily_news` are being migrated as a career-oriented capital
 signal engine. The default source pack is usable without API keys for public
@@ -482,8 +517,12 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add public capital-signal source pack and ImpactAlpha newsletter parser.
 - [x] Add source health checks and career-oriented signal scoring.
 - [x] Add structured resume and cover-letter generation contracts.
-- [ ] Port DOCX/PDF application rendering.
-- [ ] Add tests and CI.
+- [x] Port DOCX/PDF application rendering.
+- [x] Add local, Google Drive, and Google Sheets application packet sinks.
+- [x] Connect `scan-jobs` to top application packet generation.
+- [x] Add tests and CI.
+- [ ] Publish GitHub remote.
+- [ ] Add release/demo screenshots or terminal output to README.
 - [ ] Tag `v0.1.0`.
 
 ## License

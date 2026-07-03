@@ -466,6 +466,118 @@ def test_scan_jobs_send_email_uses_sender(monkeypatch):
     assert "Email sent: yes (message-1)" in output.getvalue()
 
 
+def test_scan_jobs_can_draft_top_application_packet_preview():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--draft-applications",
+                "1",
+                "--show-details",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "application_packets_requested: 1" in text
+    assert "application_packets_selected: 1" in text
+    assert "Application packets" in text
+    assert "Example Impact Fund | Impact Investment Analyst" in text
+    assert "packet:" in text
+    assert "scoring_source_fallback: 3" in text
+
+
+def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
+    calls = {}
+
+    class FakeLocalSink:
+        def __init__(self, root_dir, render_pdf=False, debug_output=False):
+            calls["local"] = {
+                "root_dir": Path(root_dir),
+                "render_pdf": render_pdf,
+                "debug_output": debug_output,
+            }
+
+        def save(self, packet, candidate):
+            folder = calls["local"]["root_dir"] / "packet-folder"
+            return SimpleNamespace(
+                folder=folder,
+                files=[
+                    folder / "resume.docx",
+                    folder / "cover_letter.docx",
+                    folder / "manifest.json",
+                ],
+                warnings=[],
+            )
+
+    class FakeDriveSink:
+        def __init__(self, config):
+            calls["drive_config"] = config
+
+        def upload_packet_folder(self, folder, files):
+            calls["drive_upload"] = {
+                "folder": folder,
+                "files": [path.name for path in files],
+            }
+            return SimpleNamespace(
+                folder_url="https://drive.google.com/drive/folders/folder-1",
+                files=[
+                    {"name": "resume.docx", "action": "updated"},
+                    {"name": "cover_letter.docx", "action": "updated"},
+                    {"name": "manifest.json", "action": "updated"},
+                ],
+            )
+
+    class FakeTracker:
+        def __init__(self, config):
+            calls["tracker_config"] = config
+
+        def write_packet(self, packet, *, output_result=None, drive_result=None):
+            calls["tracker_packet"] = packet.packet_id
+            calls["tracker_drive_url"] = drive_result.folder_url
+            return SimpleNamespace(sheet_name="Application Tracker", rows_written=1)
+
+    monkeypatch.setattr("career_agent.cli.main.LocalApplicationPacketSink", FakeLocalSink)
+    monkeypatch.setattr("career_agent.cli.main.GoogleDrivePacketSink", FakeDriveSink)
+    monkeypatch.setattr("career_agent.cli.main.GoogleSheetsApplicationTracker", FakeTracker)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--draft-applications",
+                "1",
+                "--application-output",
+                "drive",
+                "--credentials-path",
+                "~/credentials.json",
+                "--token-path",
+                "~/token.json",
+                "--replace-existing",
+                "--tracker-sheet-id",
+                "sheet-123",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert calls["local"]["root_dir"].name.startswith("career_agent_packet_")
+    assert calls["local"]["render_pdf"] is False
+    assert calls["local"]["debug_output"] is False
+    assert calls["drive_config"].replace_existing is True
+    assert calls["drive_config"].credentials_path == "~/credentials.json"
+    assert calls["tracker_config"].spreadsheet_id == "sheet-123"
+    assert calls["tracker_drive_url"] == "https://drive.google.com/drive/folders/folder-1"
+    assert "drive: https://drive.google.com/drive/folders/folder-1" in text
+    assert "tracker: Application Tracker (1 row)" in text
+
+
 def test_format_job_scan_summary_hides_details_by_default():
     opportunity = Opportunity(
         source="career_page",

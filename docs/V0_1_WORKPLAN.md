@@ -156,7 +156,7 @@ Implemented:
 
 ### Step 6: Application material generation
 
-Status: in progress.
+Status: done.
 
 Implemented:
 
@@ -179,12 +179,15 @@ Implemented:
   uploading only DOCX/PDF/manifest files
 - added opt-in Google Sheets application tracker write-back for authenticated
   users
+- added `scan-jobs --draft-applications N` to draft packets for the top
+  `apply_now` opportunities from the unified scan pipeline
+- kept batch drafting credential-free by default through preview output and
+  local fallback scoring
 
 Next:
 
-- run an authenticated tracker Sheet smoke test with local credentials after
-  the maintainer provides a Sheet ID
 - keep real master resumes, generated DOCX/PDF/PNG, and templates out of git
+- optionally run a live Drive/Sheets smoke test before the public release
 
 ### Step 6a: Capital signal discovery
 
@@ -240,3 +243,4 @@ Before applying to Codex for OSS:
 ## Current Blockers
 
 - No remote GitHub repository has been created yet.
+- Public release screenshots/demo output have not been added yet.

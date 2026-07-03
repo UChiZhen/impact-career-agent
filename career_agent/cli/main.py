@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
@@ -61,6 +62,16 @@ from career_agent.sources.watchlist import GoogleSheetsOrganizationSource, Googl
 DEFAULT_LINKEDIN_SEARCHES_PATH = Path("examples/sample_data/linkedin_searches.yaml")
 DEFAULT_MASTER_RESUME_PATH = Path("examples/sample_data/master_resume.yaml")
 DEFAULT_JOB_POSTING_PATH = Path("examples/sample_data/job_posting.md")
+
+
+@dataclass
+class ApplicationDraftResult:
+    """Artifacts produced while drafting one scanned opportunity."""
+
+    packet: object
+    output_result: object | None = None
+    drive_result: object | None = None
+    tracker_result: object | None = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -524,6 +535,72 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Number of scored capital signals to include in the digest.",
     )
+    jobs_parser.add_argument(
+        "--draft-applications",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Generate application packets for the top N apply_now opportunities after "
+            "scanning. This is opt-in and defaults to 0."
+        ),
+    )
+    jobs_parser.add_argument(
+        "--application-provider",
+        choices=("mock", "gemini"),
+        default="mock",
+        help="Provider to use for application packet generation.",
+    )
+    jobs_parser.add_argument(
+        "--master-resume",
+        default=str(DEFAULT_MASTER_RESUME_PATH),
+        help="Master resume YAML for application packet generation.",
+    )
+    jobs_parser.add_argument(
+        "--application-output",
+        choices=("preview", "local", "drive", "both"),
+        default="preview",
+        help="Where to save generated application packets from scan-jobs.",
+    )
+    jobs_parser.add_argument(
+        "--application-output-dir",
+        default="application_packets",
+        help="Local root folder for application packets generated from scan-jobs.",
+    )
+    jobs_parser.add_argument(
+        "--render-pdf",
+        action="store_true",
+        help="Also render PDF files for generated application packets. Requires LibreOffice.",
+    )
+    jobs_parser.add_argument(
+        "--debug-output",
+        action="store_true",
+        help="Save local JSON and audit debug files for generated application packets.",
+    )
+    jobs_parser.add_argument(
+        "--drive-root-folder",
+        default="Impact Career Agent",
+        help="Google Drive root folder for generated application packets.",
+    )
+    jobs_parser.add_argument(
+        "--drive-applications-folder",
+        default="Applications",
+        help="Google Drive subfolder under the root folder.",
+    )
+    jobs_parser.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Update existing Drive packet files with the same names instead of duplicating.",
+    )
+    jobs_parser.add_argument(
+        "--tracker-sheet-id",
+        help="Optional Google Sheet ID for application tracker write-back.",
+    )
+    jobs_parser.add_argument(
+        "--tracker-sheet-name",
+        default="Application Tracker",
+        help="Google Sheet tab name for application tracker write-back.",
+    )
     return parser
 
 
@@ -592,16 +669,44 @@ def run_application_draft(args: argparse.Namespace) -> str:
     )
     provider = application_provider_from_args(args, opportunity, candidate)
     packet = generate_application_packet(opportunity, candidate, provider)
+    output_result, drive_result, tracker_result = persist_application_packet(
+        args,
+        packet,
+        candidate,
+        output_mode=args.output,
+    )
+    return format_application_packet_summary(
+        packet,
+        show_json=args.show_json,
+        output_result=output_result,
+        drive_result=drive_result,
+        tracker_result=tracker_result,
+    )
+
+
+def persist_application_packet(
+    args: argparse.Namespace,
+    packet,
+    candidate,
+    *,
+    output_mode: str,
+):
+    """Save or upload an application packet through the configured sinks."""
     output_result = None
     drive_result = None
     tracker_result = None
-    if args.output in {"local", "both"}:
+    output_dir = Path(
+        getattr(args, "output_dir", None)
+        or getattr(args, "application_output_dir", "application_packets")
+    )
+
+    if output_mode in {"local", "both"}:
         output_result = LocalApplicationPacketSink(
-            root_dir=Path(args.output_dir),
+            root_dir=output_dir,
             render_pdf=args.render_pdf,
             debug_output=args.debug_output,
         ).save(packet, candidate)
-    if args.output in {"drive", "both"}:
+    if output_mode in {"drive", "both"}:
         if output_result:
             drive_result = upload_application_packet_to_drive(args, output_result)
         else:
@@ -618,13 +723,7 @@ def run_application_draft(args: argparse.Namespace) -> str:
         output_result=output_result,
         drive_result=drive_result,
     )
-    return format_application_packet_summary(
-        packet,
-        show_json=args.show_json,
-        output_result=output_result,
-        drive_result=drive_result,
-        tracker_result=tracker_result,
-    )
+    return output_result, drive_result, tracker_result
 
 
 def upload_application_packet_to_drive(args: argparse.Namespace, output_result):
@@ -698,7 +797,8 @@ def application_provider_from_args(
     candidate,
 ):
     """Build the selected provider for application drafting."""
-    if args.provider == "gemini":
+    provider_name = getattr(args, "provider", None) or getattr(args, "application_provider", "mock")
+    if provider_name == "gemini":
         return GeminiProvider()
     return SequenceMockLLMProvider(
         [
@@ -1137,15 +1237,26 @@ def run_job_scan(args: argparse.Namespace) -> str:
         deduped = score_opportunities_with_fallback(deduped, candidate, provider)
         source_summary.update(score_summary(deduped))
         source_summary.update(scoring_source_summary(deduped))
-    elif args.send_email:
+    elif args.send_email or args.draft_applications > 0:
         candidate = load_candidate_profile(Path(args.candidate_profile))
-        deduped = score_unscored_opportunities_for_digest(deduped, candidate)
+        reason = (
+            "Application packet drafting requested without --score."
+            if args.draft_applications > 0
+            else "Email digest requested without --score."
+        )
+        deduped = score_unscored_opportunities(deduped, candidate, reason=reason)
         source_summary.update(score_summary(deduped))
         source_summary.update(scoring_source_summary(deduped))
 
     if args.include_news:
         signals, signal_summary = fetch_and_score_signals_for_job_scan(args)
         source_summary.update(signal_summary)
+
+    application_results = []
+    if args.draft_applications > 0:
+        application_results = draft_application_packets_for_scan(args, deduped)
+        source_summary["application_packets_requested"] = args.draft_applications
+        source_summary["application_packets_selected"] = len(application_results)
 
     source_summary["deduped_total"] = len(deduped)
     summary_text = format_job_scan_summary(
@@ -1171,6 +1282,8 @@ def run_job_scan(args: argparse.Namespace) -> str:
             subject=args.email_subject,
         )
         summary_text = append_email_send_summary(summary_text, send_result)
+    if application_results:
+        summary_text = append_application_packet_summary(summary_text, application_results)
     return summary_text
 
 
@@ -1294,16 +1407,69 @@ def scoring_source_summary(opportunities) -> dict[str, int]:
 
 def score_unscored_opportunities_for_digest(opportunities, candidate):
     """Ensure emailed opportunities have a score without requiring an LLM call."""
+    return score_unscored_opportunities(
+        opportunities,
+        candidate,
+        reason="Email digest requested without --score.",
+    )
+
+
+def score_unscored_opportunities(opportunities, candidate, *, reason: str):
+    """Ensure opportunities have scores before downstream workflow steps."""
     return [
         opportunity
         if opportunity.fit is not None
         else fallback_score_opportunity(
             opportunity,
             candidate,
-            reason="Email digest requested without --score.",
+            reason=reason,
         )
         for opportunity in opportunities
     ]
+
+
+def draft_application_packets_for_scan(
+    args: argparse.Namespace,
+    opportunities,
+) -> list[ApplicationDraftResult]:
+    """Generate application packets for the top apply_now scan results."""
+    candidate = load_candidate_profile(Path(args.candidate_profile))
+    master_resume = load_master_resume(Path(args.master_resume))
+    candidate = candidate.model_copy(update={"master_resume": master_resume})
+    selected = select_application_draft_opportunities(
+        opportunities,
+        limit=max(0, args.draft_applications),
+    )
+
+    results = []
+    for opportunity in selected:
+        provider = application_provider_from_args(args, opportunity, candidate)
+        packet = generate_application_packet(opportunity, candidate, provider)
+        output_result, drive_result, tracker_result = persist_application_packet(
+            args,
+            packet,
+            candidate,
+            output_mode=args.application_output,
+        )
+        results.append(
+            ApplicationDraftResult(
+                packet=packet,
+                output_result=output_result,
+                drive_result=drive_result,
+                tracker_result=tracker_result,
+            )
+        )
+    return results
+
+
+def select_application_draft_opportunities(opportunities, *, limit: int):
+    """Choose the highest-scoring apply_now opportunities for packet generation."""
+    candidates = [
+        opportunity
+        for opportunity in opportunities
+        if opportunity.fit and opportunity.fit.recommended_action == "apply_now"
+    ]
+    return sorted(candidates, key=lambda opportunity: opportunity.fit.total, reverse=True)[:limit]
 
 
 def fetch_linkedin_email_opportunities_for_job_scan(args: argparse.Namespace):
@@ -1414,6 +1580,32 @@ def append_email_send_summary(summary_text: str, send_result: dict) -> str:
             suffix += f" ({message_id})"
         return f"{summary_text}\n{suffix}"
     return f"{summary_text}\nEmail sent: no ({send_result.get('error', 'unknown error')})"
+
+
+def append_application_packet_summary(
+    summary_text: str,
+    application_results: list[ApplicationDraftResult],
+) -> str:
+    """Append generated packet outcomes to a job scan summary."""
+    lines = [summary_text, "", "Application packets"]
+    for result in application_results:
+        packet = result.packet
+        opportunity = packet.opportunity
+        score = opportunity.fit.total if opportunity.fit else "unscored"
+        lines.append(
+            f" - {opportunity.company} | {opportunity.job_title} | "
+            f"{score}/100 | {packet.packet_id}"
+        )
+        if result.output_result:
+            lines.append(f"   local: {result.output_result.folder}")
+        if result.drive_result:
+            lines.append(f"   drive: {result.drive_result.folder_url}")
+        if result.tracker_result:
+            lines.append(
+                f"   tracker: {result.tracker_result.sheet_name} "
+                f"({result.tracker_result.rows_written} row)"
+            )
+    return "\n".join(lines)
 
 
 def load_env_file(path: Path) -> None:
