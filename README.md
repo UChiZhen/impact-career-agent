@@ -1,6 +1,6 @@
 # Impact Career Agent
 
-Open-source agents for mission-driven career search.
+Open-source agents for mission-driven career automation.
 
 Impact Career Agent helps impact finance, public-interest, and mission-driven
 job seekers turn scattered signals into an actionable application pipeline:
@@ -65,6 +65,47 @@ It uses fictional sample data and deterministic local scoring. It does not call
 OpenAI, Gemini, Gmail, Google Sheets, Apify, Telegram, or any network service.
 The demo merges three fixture sources: career-page watchlist results, LinkedIn
 alert emails, and Apify-style LinkedIn keyword search results.
+
+### Credential-Free Demo Evidence
+
+The demo command runs end to end with fictional fixtures:
+
+```text
+$ python -m career_agent.cli.main demo
+Impact Career Agent demo digest
+Candidate: Jane Doe (Chicago, IL)
+Sources: career_page=1, linkedin_email=1, linkedin_search=1, deduped_total=3
+
+Top signals
+ - Community finance fund closes new climate lending vehicle [impact_investing]
+
+Opportunities
+ - Example Impact Fund | Impact Investment Analyst | 94/100 | apply_now
+ - Example Climate Foundation | Portfolio Insights Analyst | 49/100 | skip
+ - Example Green Bank | Climate Finance Analyst | 42/100 | skip
+
+Note: this demo used deterministic local scoring, not an external LLM.
+```
+
+The unified scan can also draft the top application packet without credentials,
+file output, or cloud calls:
+
+```text
+$ python -m career_agent.cli.main scan-jobs --config examples/demo_config.yaml --draft-applications 1
+Job scan summary
+career_page: 1
+linkedin_email: 1
+linkedin_search: 1
+deduped_total: 3
+score_apply_now: 1
+score_review: 1
+score_skip: 1
+application_packets_requested: 1
+application_packets_selected: 1
+
+Application packets
+ - Example Impact Fund | Impact Investment Analyst | 97/100 | packet:d338cb563fe417cf
+```
 
 The unified job scanner defaults to the same credential-free fixture sources:
 
@@ -521,8 +562,8 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Add local, Google Drive, and Google Sheets application packet sinks.
 - [x] Connect `scan-jobs` to top application packet generation.
 - [x] Add tests and CI.
+- [x] Add release/demo terminal output to README.
 - [ ] Publish GitHub remote.
-- [ ] Add release/demo screenshots or terminal output to README.
 - [ ] Tag `v0.1.0`.
 
 ## License
