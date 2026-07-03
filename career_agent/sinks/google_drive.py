@@ -218,14 +218,7 @@ def upload_drive_file(
     replace_existing: bool = False,
 ) -> dict[str, str]:
     """Upload one local file to Drive."""
-    try:
-        from googleapiclient.http import MediaFileUpload
-    except ImportError as exc:
-        raise RuntimeError(
-            "Google Drive uploads require google-api-python-client."
-        ) from exc
-
-    media_body = MediaFileUpload(str(path), resumable=False)
+    media_body = media_file_upload(str(path), resumable=False)
     existing = (
         find_drive_file(service, name=path.name, parent_id=parent_id)
         if replace_existing
@@ -263,6 +256,17 @@ def upload_drive_file(
         "mime_type": uploaded.get("mimeType", ""),
         "action": action,
     }
+
+
+def media_file_upload(filename: str, *, resumable: bool = False):
+    """Create a Google API media upload object with lazy optional imports."""
+    try:
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as exc:
+        raise RuntimeError(
+            "Google Drive uploads require google-api-python-client."
+        ) from exc
+    return MediaFileUpload(filename, resumable=resumable)
 
 
 def should_upload_to_drive(path: Path) -> bool:

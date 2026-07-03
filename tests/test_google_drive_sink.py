@@ -124,7 +124,7 @@ def test_upload_drive_file_replaces_existing_file(tmp_path, monkeypatch):
             self.filename = filename
             self.resumable = resumable
 
-    monkeypatch.setattr("googleapiclient.http.MediaFileUpload", FakeMediaFileUpload)
+    monkeypatch.setattr("career_agent.sinks.google_drive.media_file_upload", FakeMediaFileUpload)
 
     result = upload_drive_file(
         service,
