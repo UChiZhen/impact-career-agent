@@ -544,7 +544,7 @@ must stay out of git. See [SECURITY.md](SECURITY.md) for details.
 
 ## Project Status
 
-This repository is pre-v0.1. The current work is migration and hardening:
+This repository is at the v0.1.0 local-first release:
 
 - [x] Create open-source project skeleton.
 - [x] Define core data models.
@@ -563,8 +563,8 @@ This repository is pre-v0.1. The current work is migration and hardening:
 - [x] Connect `scan-jobs` to top application packet generation.
 - [x] Add tests and CI.
 - [x] Add release/demo terminal output to README.
-- [ ] Publish GitHub remote.
-- [ ] Tag `v0.1.0`.
+- [x] Publish GitHub remote.
+- [x] Tag `v0.1.0`.
 
 ## License
 

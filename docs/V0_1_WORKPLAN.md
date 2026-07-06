@@ -242,5 +242,4 @@ Before applying to Codex for OSS:
 
 ## Current Blockers
 
-- No remote GitHub repository has been created yet.
-- Public release screenshots/demo output have not been added yet.
+- None for the v0.1.0 local-first release.
