@@ -14,7 +14,7 @@ from career_agent.sinks.google_drive import (
 def test_should_upload_to_drive_only_user_facing_files():
     assert should_upload_to_drive(Path("resume.docx"))
     assert should_upload_to_drive(Path("resume.pdf"))
-    assert should_upload_to_drive(Path("manifest.json"))
+    assert not should_upload_to_drive(Path("manifest.json"))
     assert not should_upload_to_drive(Path("resume.json"))
     assert not should_upload_to_drive(Path("audit_notes.txt"))
 
@@ -86,7 +86,6 @@ def test_drive_packet_sink_creates_folder_tree_and_uploads_filtered_files(tmp_pa
     assert [item["name"] for item in uploaded] == [
         "resume.docx",
         "cover_letter.docx",
-        "manifest.json",
     ]
     assert all(item["parent_id"] == "created-3" for item in uploaded)
     assert [created["body"]["name"] for created in service.created] == [

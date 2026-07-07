@@ -271,8 +271,6 @@ def media_file_upload(filename: str, *, resumable: bool = False):
 
 def should_upload_to_drive(path: Path) -> bool:
     """Return whether a packet file should be uploaded to Drive."""
-    if path.name == "manifest.json":
-        return True
     return path.suffix.lower() in {".docx", ".pdf"}
 
 

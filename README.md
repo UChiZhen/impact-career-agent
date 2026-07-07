@@ -247,11 +247,11 @@ Impact Career Agent/
     YYYY-MM-DD__company__role__location__hash/
       Resume - Company - Role.docx
       Cover Letter - Company - Role.docx
-      manifest.json
 ```
 
 Use `--output both` to keep the same packet locally and in Drive. Debug JSON/TXT
-files remain local-only and are not uploaded to Drive.
+files and the local `manifest.json` remain local-only and are not uploaded to
+Drive by default.
 For recurring automation, add `--replace-existing` to update files with the same
 names in the packet folder instead of uploading duplicates.
 

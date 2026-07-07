@@ -247,12 +247,13 @@ record the conversion warning in `manifest.json` rather than failing the entire
 application packet. Hosted/cloud deployments can make PDF generation reliable by
 pinning LibreOffice in the runtime image.
 
-Drive packet uploads should include only user-facing artifacts: DOCX, available
-PDFs, and `manifest.json`. Local debug files such as `resume.json`,
-`cover_letter.json`, and `audit_notes.txt` are useful during development but
-should not be uploaded to Drive by default. Recurring automation can enable
-replace-existing behavior so reruns update same-named packet files instead of
-creating duplicate Drive files.
+Drive packet uploads should include only user-facing artifacts: DOCX and
+available PDFs. The local `manifest.json` is useful for audit/debugging, but it
+should stay local by default so a user's Drive folder contains only application
+materials. Local debug files such as `resume.json`, `cover_letter.json`, and
+`audit_notes.txt` are useful during development but should not be uploaded to
+Drive by default. Recurring automation can enable replace-existing behavior so
+reruns update same-named packet files instead of creating duplicate Drive files.
 
 Application tracker write-back appends one row to a user-provided Google Sheet.
 The default tab is `Application Tracker`; the schema includes packet metadata,

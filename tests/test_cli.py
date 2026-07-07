@@ -527,7 +527,6 @@ def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
                 files=[
                     {"name": "resume.docx", "action": "updated"},
                     {"name": "cover_letter.docx", "action": "updated"},
-                    {"name": "manifest.json", "action": "updated"},
                 ],
             )
 
@@ -756,7 +755,6 @@ def test_draft_application_drive_output_uses_drive_sink(monkeypatch):
                 files=[
                     {"name": "resume.docx"},
                     {"name": "cover_letter.docx"},
-                    {"name": "manifest.json"},
                 ],
             )
 
@@ -821,7 +819,6 @@ def test_draft_application_tracker_sheet_writeback(monkeypatch):
                 files=[
                     {"name": "resume.docx"},
                     {"name": "cover_letter.docx"},
-                    {"name": "manifest.json"},
                 ],
             )
 

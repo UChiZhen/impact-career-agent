@@ -45,7 +45,6 @@ def test_application_tracker_row_uses_drive_file_names():
         files=[
             {"name": "Resume - Example Impact Fund - Impact Investment Analyst.docx"},
             {"name": "Cover Letter - Example Impact Fund - Impact Investment Analyst.docx"},
-            {"name": "manifest.json"},
         ],
     )
 
@@ -58,7 +57,7 @@ def test_application_tracker_row_uses_drive_file_names():
     assert row[8] == "https://drive.google.com/folders/folder-1"
     assert row[9].startswith("Resume - Example Impact Fund")
     assert row[10].startswith("Cover Letter - Example Impact Fund")
-    assert row[11] == "manifest.json"
+    assert row[11] == ""
 
 
 def test_ensure_application_tracker_header_writes_when_empty():
