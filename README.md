@@ -22,6 +22,10 @@ The goal of v0.1 is not to publish a polished SaaS product. It is to create a
 reproducible, privacy-conscious, contributor-ready open-source package with a
 small demo mode, typed data contracts, tests, and clear extension points.
 
+New users can start with the credential-free demo and then add private sources
+one at a time. See [docs/ONBOARDING.md](docs/ONBOARDING.md) for the full
+demo-to-local-to-cloud setup path.
+
 ## Target Users
 
 - Students and early-career professionals in impact finance, public policy,
