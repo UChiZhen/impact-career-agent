@@ -861,3 +861,21 @@ def test_draft_application_tracker_sheet_writeback(monkeypatch):
     assert calls["tracker_config"].token_path == "~/token.json"
     assert calls["tracker_drive_url"] == "https://drive.google.com/drive/folders/folder-1"
     assert "Tracker row: Application Tracker (1 row)" in output.getvalue()
+
+
+def test_draft_application_preview_skips_tracker_from_env(monkeypatch):
+    monkeypatch.setenv("GOOGLE_APPLICATION_TRACKER_SHEET_ID", "sheet-from-env")
+
+    class UnexpectedTracker:
+        def __init__(self, config):
+            raise AssertionError("preview mode should not initialize the Sheets tracker")
+
+    monkeypatch.setattr("career_agent.cli.main.GoogleSheetsApplicationTracker", UnexpectedTracker)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["draft-application"])
+
+    assert exit_code == 0
+    assert "Application packet draft" in output.getvalue()
+    assert "Tracker row" not in output.getvalue()

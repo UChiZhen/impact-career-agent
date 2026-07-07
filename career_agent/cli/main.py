@@ -717,12 +717,14 @@ def persist_application_packet(
                     debug_output=False,
                 ).save(packet, candidate)
                 drive_result = upload_application_packet_to_drive(args, transient_result)
-    tracker_result = write_application_tracker_if_requested(
-        args,
-        packet,
-        output_result=output_result,
-        drive_result=drive_result,
-    )
+    tracker_result = None
+    if output_mode != "preview":
+        tracker_result = write_application_tracker_if_requested(
+            args,
+            packet,
+            output_result=output_result,
+            drive_result=drive_result,
+        )
     return output_result, drive_result, tracker_result
 
 
