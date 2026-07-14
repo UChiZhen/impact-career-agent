@@ -153,7 +153,10 @@ def score_demo_opportunity(
         ]
     ).lower()
 
-    excluded_hit = any(keyword.lower() in combined_text for keyword in candidate.excluded_keywords)
+    title_text = opportunity.job_title.lower()
+    excluded_hit = any(
+        keyword.lower() in title_text for keyword in candidate.excluded_keywords
+    )
     skill_hits = [
         skill
         for skill in candidate.skills

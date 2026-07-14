@@ -69,6 +69,19 @@ def test_build_prompt_contains_candidate_and_job_context():
     assert "Legacy action values are not allowed" in prompt
 
 
+def test_build_prompt_allows_longer_description_for_final_rescore():
+    opportunity = demo_opportunity().model_copy(update={"description": "A" * 7000})
+
+    prompt = build_job_fit_prompt(
+        demo_candidate(),
+        [opportunity],
+        description_limit=6000,
+    )
+
+    assert "A" * 6000 in prompt
+    assert "A" * 6001 not in prompt
+
+
 def test_score_opportunity_with_mock_provider():
     payload = [
         {
@@ -118,6 +131,20 @@ def test_fallback_score_opportunity_adds_fit_and_metadata():
     assert scored.fit.recommended_action in {"apply_now", "review", "skip"}
     assert scored.metadata["scoring_source"] == "fallback"
     assert "provider unavailable" in scored.metadata["scoring_fallback_reason"]
+
+
+def test_fallback_seniority_exclusion_only_applies_to_job_title():
+    junior_role = demo_opportunity().model_copy(
+        update={"description": "Work with senior leaders. Python SQL impact finance."}
+    )
+    senior_role = junior_role.model_copy(update={"job_title": "Senior Investment Analyst"})
+
+    junior_scored = fallback_score_opportunity(junior_role, demo_candidate())
+    senior_scored = fallback_score_opportunity(senior_role, demo_candidate())
+
+    assert junior_scored.fit.total > 45
+    assert senior_scored.fit.total <= 45
+    assert "Excluded seniority keyword detected." in senior_scored.fit.risks
 
 
 def test_score_opportunities_with_fallback_marks_llm_success():

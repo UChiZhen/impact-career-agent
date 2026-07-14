@@ -213,6 +213,23 @@ Opportunity + CandidateProfile.master_resume + LLMProvider
   -> ApplicationPacket
 ```
 
+Scanned opportunities pass through a full-JD gate before automatic drafting:
+
+```text
+initial apply_now score
+  -> complete existing description or enrich from job URL
+  -> validate length, role-content signals, and blocked-page markers
+  -> rescore against the complete JD
+  -> draft only when the final action is still apply_now
+```
+
+LinkedIn alert emails remain discovery inputs: the Gmail parser extracts the
+job URL, then the enrichment layer tries LinkedIn's public guest job page and
+the normalized posting URL. Apify search records use `descriptionText` or
+`descriptionHtml` returned by the user's configured actor. Failed enrichment
+is explicit (`needs_jd` or `removed`); short snippets and scoring rationales are
+never substituted for a full job description during application generation.
+
 The current modules are:
 
 - `career_agent/applications/resume.py`: migrates the resume-tailoring prompt

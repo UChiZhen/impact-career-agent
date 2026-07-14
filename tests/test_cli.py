@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from career_agent import __version__
 from career_agent.cli.main import (
+    draft_application_packets_for_scan,
     format_job_scan_summary,
     format_news_scan_summary,
     linkedin_email_config_from_args,
@@ -13,7 +14,11 @@ from career_agent.cli.main import (
     main,
     mock_score_response,
 )
-from career_agent.core import Opportunity
+from career_agent.core import FitScore, Opportunity
+from career_agent.sources.job_descriptions import (
+    JobDescriptionEnrichmentResult,
+    JobDescriptionQuality,
+)
 
 
 def test_version_command():
@@ -487,7 +492,152 @@ def test_scan_jobs_can_draft_top_application_packet_preview():
     assert "Application packets" in text
     assert "Example Impact Fund | Impact Investment Analyst" in text
     assert "packet:" in text
-    assert "scoring_source_fallback: 3" in text
+    assert "scoring_source_llm: 1" in text
+    assert "scoring_source_fallback: 2" in text
+
+
+def test_scan_jobs_does_not_draft_when_full_jd_is_unavailable(monkeypatch):
+    def incomplete_enrichment(opportunity):
+        return JobDescriptionEnrichmentResult(
+            opportunity=opportunity,
+            status="needs_jd",
+            quality=JobDescriptionQuality(
+                accepted=False,
+                char_count=120,
+                word_count=20,
+                reasons=("description_too_short",),
+            ),
+            error="blocked",
+        )
+
+    monkeypatch.setattr("career_agent.cli.main.enrich_job_description", incomplete_enrichment)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--draft-applications",
+                "1",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "application_jd_attempted: 1" in text
+    assert "application_needs_jd: 1" in text
+    assert "application_packets_selected: 0" in text
+    assert "Application packets" not in text
+
+
+def test_scan_jobs_rescores_full_jd_before_drafting(monkeypatch):
+    def complete_enrichment(opportunity):
+        return JobDescriptionEnrichmentResult(
+            opportunity=opportunity,
+            status="existing",
+            source="source_description",
+            quality=JobDescriptionQuality(
+                accepted=True,
+                char_count=len(opportunity.description),
+                word_count=150,
+            ),
+        )
+
+    def review_after_full_jd(opportunities, candidate, provider, *, description_limit=1200):
+        assert description_limit == 6000
+        return [
+            opportunity.model_copy(
+                update={
+                    "fit": FitScore(
+                        total=72,
+                        recommended_action="review",
+                        match_summary="Full JD reveals a weaker fit.",
+                    )
+                }
+            )
+            for opportunity in opportunities
+        ]
+
+    monkeypatch.setattr("career_agent.cli.main.enrich_job_description", complete_enrichment)
+    monkeypatch.setattr(
+        "career_agent.cli.main.score_opportunities_with_fallback",
+        review_after_full_jd,
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--draft-applications",
+                "1",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "application_jd_ready: 1" in text
+    assert "application_not_apply_after_jd: 1" in text
+    assert "application_packets_selected: 0" in text
+
+
+def test_application_batch_tries_next_candidate_after_missing_jd(monkeypatch):
+    first = Opportunity(
+        source="linkedin_email",
+        company="Missing JD Org",
+        job_title="Impact Analyst",
+        job_url="https://www.linkedin.com/jobs/view/111111",
+        fit=FitScore(total=92, recommended_action="apply_now"),
+    )
+    second = Opportunity(
+        source="linkedin_search",
+        company="Example Impact Fund",
+        job_title="Impact Investment Analyst",
+        job_url="https://www.linkedin.com/jobs/view/222222",
+        description="Impact finance responsibilities and qualifications. " * 30,
+        fit=FitScore(total=88, recommended_action="apply_now"),
+    )
+
+    def staged_enrichment(opportunity):
+        if opportunity.company == "Missing JD Org":
+            return JobDescriptionEnrichmentResult(
+                opportunity=opportunity,
+                status="needs_jd",
+                quality=JobDescriptionQuality(False, 0, 0, ("missing_description",)),
+            )
+        return JobDescriptionEnrichmentResult(
+            opportunity=opportunity,
+            status="existing",
+            source="source_description",
+            quality=JobDescriptionQuality(True, len(opportunity.description), 150),
+        )
+
+    monkeypatch.setattr("career_agent.cli.main.enrich_job_description", staged_enrichment)
+    args = SimpleNamespace(
+        candidate_profile="examples/sample_data/candidate_profile.yaml",
+        master_resume="examples/sample_data/master_resume.yaml",
+        draft_applications=1,
+        max_jd_enrichment_attempts=2,
+        score_provider="mock",
+        application_provider="mock",
+        application_output="preview",
+        application_output_dir="application_packets",
+        render_pdf=False,
+        debug_output=False,
+    )
+
+    batch = draft_application_packets_for_scan(args, [first, second])
+
+    assert len(batch.results) == 1
+    assert batch.summary["application_jd_attempted"] == 2
+    assert batch.summary["application_needs_jd"] == 1
+    assert batch.summary["application_jd_ready"] == 1
+    assert batch.opportunities[0].metadata["application_status"] == "needs_jd"
+    assert batch.opportunities[1].metadata["application_status"] == "preview_ready"
 
 
 def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):

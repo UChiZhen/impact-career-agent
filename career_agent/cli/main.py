@@ -46,6 +46,7 @@ from career_agent.sources.linkedin_search import (
     LinkedInSearchSourceConfig,
     build_linkedin_search_url,
 )
+from career_agent.sources.job_descriptions import enrich_job_description
 from career_agent.sources.news import (
     DEFAULT_NEWS_SOURCE_PACK,
     ImpactAlphaNewsletterConfig,
@@ -72,6 +73,15 @@ class ApplicationDraftResult:
     output_result: object | None = None
     drive_result: object | None = None
     tracker_result: object | None = None
+
+
+@dataclass
+class ApplicationDraftBatch:
+    """Application drafting outcomes plus updated opportunity workflow state."""
+
+    opportunities: list[Opportunity]
+    results: list[ApplicationDraftResult]
+    summary: dict[str, int]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -550,6 +560,14 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("mock", "gemini"),
         default="mock",
         help="Provider to use for application packet generation.",
+    )
+    jobs_parser.add_argument(
+        "--max-jd-enrichment-attempts",
+        type=int,
+        help=(
+            "Maximum apply_now candidates to inspect for complete job descriptions. "
+            "Defaults to twice --draft-applications."
+        ),
     )
     jobs_parser.add_argument(
         "--master-resume",
@@ -1256,9 +1274,14 @@ def run_job_scan(args: argparse.Namespace) -> str:
 
     application_results = []
     if args.draft_applications > 0:
-        application_results = draft_application_packets_for_scan(args, deduped)
+        application_batch = draft_application_packets_for_scan(args, deduped)
+        deduped = application_batch.opportunities
+        application_results = application_batch.results
         source_summary["application_packets_requested"] = args.draft_applications
+        source_summary.update(application_batch.summary)
         source_summary["application_packets_selected"] = len(application_results)
+        source_summary.update(score_summary(deduped))
+        source_summary.update(scoring_source_summary(deduped))
 
     source_summary["deduped_total"] = len(deduped)
     summary_text = format_job_scan_summary(
@@ -1433,20 +1456,66 @@ def score_unscored_opportunities(opportunities, candidate, *, reason: str):
 def draft_application_packets_for_scan(
     args: argparse.Namespace,
     opportunities,
-) -> list[ApplicationDraftResult]:
-    """Generate application packets for the top apply_now scan results."""
+) -> ApplicationDraftBatch:
+    """Enrich, rescore, and draft the top complete apply_now opportunities."""
     candidate = load_candidate_profile(Path(args.candidate_profile))
     master_resume = load_master_resume(Path(args.master_resume))
     candidate = candidate.model_copy(update={"master_resume": master_resume})
+    packet_limit = max(0, args.draft_applications)
+    configured_attempts = getattr(args, "max_jd_enrichment_attempts", None)
+    attempt_limit = max(
+        packet_limit,
+        configured_attempts if configured_attempts is not None else packet_limit * 2,
+    )
     selected = select_application_draft_opportunities(
         opportunities,
-        limit=max(0, args.draft_applications),
+        limit=attempt_limit,
     )
 
     results = []
+    updates: dict[str, Opportunity] = {}
+    summary = {
+        "application_jd_attempted": 0,
+        "application_jd_ready": 0,
+        "application_needs_jd": 0,
+        "application_removed": 0,
+        "application_not_apply_after_jd": 0,
+    }
     for opportunity in selected:
-        provider = application_provider_from_args(args, opportunity, candidate)
-        packet = generate_application_packet(opportunity, candidate, provider)
+        if len(results) >= packet_limit:
+            break
+        summary["application_jd_attempted"] += 1
+        enrichment = enrich_job_description(opportunity)
+        enriched = enrichment.opportunity
+
+        if enrichment.status == "removed":
+            summary["application_removed"] += 1
+            updates[opportunity.dedup_key] = with_application_status(enriched, "removed")
+            continue
+        if not enrichment.ready_for_application:
+            summary["application_needs_jd"] += 1
+            updates[opportunity.dedup_key] = with_application_status(enriched, "needs_jd")
+            continue
+
+        summary["application_jd_ready"] += 1
+        scoring_provider = scoring_provider_from_args(args, [enriched])
+        rescored = score_opportunities_with_fallback(
+            [enriched],
+            candidate,
+            scoring_provider,
+            description_limit=6000,
+        )[0]
+        rescored = with_metadata(rescored, jd_rescored="true")
+        if not rescored.fit or rescored.fit.recommended_action != "apply_now":
+            summary["application_not_apply_after_jd"] += 1
+            updates[opportunity.dedup_key] = with_application_status(
+                rescored,
+                "review_after_jd",
+            )
+            continue
+
+        provider = application_provider_from_args(args, rescored, candidate)
+        packet = generate_application_packet(rescored, candidate, provider)
         output_result, drive_result, tracker_result = persist_application_packet(
             args,
             packet,
@@ -1461,7 +1530,30 @@ def draft_application_packets_for_scan(
                 tracker_result=tracker_result,
             )
         )
-    return results
+        status = "preview_ready" if args.application_output == "preview" else "materials_ready"
+        status_metadata = {"application_status": status}
+        if drive_result:
+            status_metadata["application_drive_url"] = drive_result.folder_url
+        updates[opportunity.dedup_key] = with_metadata(rescored, **status_metadata)
+
+    updated_opportunities = [updates.get(item.dedup_key, item) for item in opportunities]
+    return ApplicationDraftBatch(
+        opportunities=updated_opportunities,
+        results=results,
+        summary=summary,
+    )
+
+
+def with_application_status(opportunity: Opportunity, status: str) -> Opportunity:
+    """Attach a reader-facing application workflow state."""
+    return with_metadata(opportunity, application_status=status)
+
+
+def with_metadata(opportunity: Opportunity, **values: str) -> Opportunity:
+    """Return an opportunity with string metadata updates."""
+    return opportunity.model_copy(
+        update={"metadata": {**opportunity.metadata, **values}}
+    )
 
 
 def select_application_draft_opportunities(opportunities, *, limit: int):

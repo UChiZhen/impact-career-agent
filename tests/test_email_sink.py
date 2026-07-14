@@ -92,6 +92,40 @@ def test_build_digest_subject_counts_actions():
     assert "1 Apply Now, 1 Review" in subject
 
 
+def test_digest_shows_application_status_and_drive_link():
+    ready = scored_opportunity("Impact Analyst", "apply_now", 88).model_copy(
+        update={
+            "metadata": {
+                "application_status": "materials_ready",
+                "application_drive_url": "https://drive.google.com/drive/folders/example",
+            }
+        }
+    )
+    needs_jd = scored_opportunity("Climate Analyst", "apply_now", 84).model_copy(
+        update={"metadata": {"application_status": "needs_jd"}}
+    )
+
+    digest = render_job_digest([ready, needs_jd], {"deduped_total": 2})
+
+    assert "Application: Application materials ready" in digest["text"]
+    assert "Application: Needs full job description" in digest["text"]
+    assert "https://drive.google.com/drive/folders/example" in digest["text"]
+    assert "Application materials ready" in digest["html"]
+    assert "Needs full job description" in digest["html"]
+    assert "Open files" in digest["html"]
+
+
+def test_digest_hides_removed_application_opportunities():
+    removed = scored_opportunity("Closed Role", "apply_now", 88).model_copy(
+        update={"metadata": {"application_status": "removed"}}
+    )
+
+    digest = render_job_digest([removed], {"deduped_total": 1})
+
+    assert "Closed Role" not in digest["text"]
+    assert "Closed Role" not in digest["html"]
+
+
 def test_gmail_email_sender_uses_fake_service():
     service = FakeGmailService()
     sender = GmailEmailSender(

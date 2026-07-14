@@ -22,6 +22,7 @@ from typing import Any
 from urllib.parse import quote
 
 from career_agent.core import Opportunity
+from career_agent.sources.job_descriptions import html_fragment_to_text
 from career_agent.sources.opportunities import (
     LinkedInSearchQuery,
     dedupe_opportunities,
@@ -119,7 +120,6 @@ class LinkedInSearchSource:
         run_input = {
             "urls": [build_linkedin_search_url(query.keyword, query.location)],
             "maxItems": self.config.max_results_per_query,
-            "scrapeJobDetails": False,
             "proxy": {"useApifyProxy": True},
         }
         run = call_apify_actor(
@@ -150,6 +150,11 @@ def normalize_apify_item(item: dict, query: LinkedInSearchQuery) -> dict:
     title = item.get("title") or item.get("jobTitle", "")
     if not title:
         return {}
+    description = (
+        item.get("descriptionText")
+        or item.get("description")
+        or html_fragment_to_text(str(item.get("descriptionHtml") or ""))
+    )
 
     return {
         "source": "linkedin_search",
@@ -159,7 +164,8 @@ def normalize_apify_item(item: dict, query: LinkedInSearchQuery) -> dict:
         "location": (item.get("location") or item.get("jobLocation", "")).strip(),
         "job_url": job_url.strip(),
         "posted_date": item.get("postedAt", ""),
-        "description_snippet": (item.get("description") or "")[:500],
+        "description": str(description).strip()[:12_000],
+        "description_source": "apify_detail" if description else "",
         "applicant_count": item.get("applicantsCount", ""),
         "search_keyword": query.keyword,
         "search_location": query.location,

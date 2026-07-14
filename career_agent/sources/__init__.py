@@ -20,6 +20,14 @@ from career_agent.sources.career_extraction import extract_opportunities_from_sn
 from career_agent.sources.career_pages import CareerPageSnapshot, CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
 from career_agent.sources.linkedin_search import LinkedInSearchSource, LinkedInSearchSourceConfig
+from career_agent.sources.job_descriptions import (
+    JobDescriptionEnrichmentResult,
+    JobDescriptionFetchResult,
+    JobDescriptionQuality,
+    assess_job_description,
+    enrich_job_description,
+    fetch_job_description,
+)
 from career_agent.sources.news import (
     DEFAULT_NEWS_SOURCE_PACK,
     IMPACTALPHA_SENDER,
@@ -61,6 +69,12 @@ __all__ = [
     "LinkedInEmailSourceConfig",
     "LinkedInSearchSource",
     "LinkedInSearchSourceConfig",
+    "JobDescriptionEnrichmentResult",
+    "JobDescriptionFetchResult",
+    "JobDescriptionQuality",
+    "assess_job_description",
+    "enrich_job_description",
+    "fetch_job_description",
     "DEFAULT_NEWS_SOURCE_PACK",
     "IMPACTALPHA_SENDER",
     "ImpactAlphaNewsletterConfig",

@@ -213,6 +213,12 @@ def render_text_section(title: str, opportunities: list[Opportunity]) -> list[st
             lines.append(f"  URL: {opportunity.job_url}")
         if opportunity.fit and opportunity.fit.match_summary:
             lines.append(f"  Summary: {opportunity.fit.match_summary}")
+        application_status = format_application_status(opportunity)
+        if application_status:
+            lines.append(f"  Application: {application_status}")
+        drive_url = opportunity.metadata.get("application_drive_url", "")
+        if drive_url:
+            lines.append(f"  Materials: {drive_url}")
     lines.append("")
     return lines
 
@@ -262,6 +268,14 @@ _SIGNAL_ACTION_LABELS = {
     "review_keywords": "Review search keywords",
     "ignore": "No action",
     "review": "Review",
+}
+
+_APPLICATION_STATUS_LABELS = {
+    "needs_jd": "Needs full job description",
+    "materials_ready": "Application materials ready",
+    "preview_ready": "Application preview ready",
+    "review_after_jd": "Review after full job description",
+    "removed": "Posting removed",
 }
 
 
@@ -426,12 +440,14 @@ def render_html_card(opportunity: Opportunity, accent: str) -> str:
         if summary
         else ""
     )
+    application_html = render_application_status_html(opportunity)
     inner = (
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
         f'<td style="font-size:15px;font-weight:700;color:{_INK};">{link}</td>'
         f'<td align="right" style="vertical-align:top;padding-left:8px;">{pill}</td>'
         "</tr></table>"
         f'<div style="margin-top:3px;font-size:13px;color:{_MUTED};">{meta}</div>'
+        f"{application_html}"
         f"{summary_html}"
     )
     return _card_shell(accent, inner)
@@ -475,8 +491,39 @@ def by_action(opportunities: list[Opportunity], action: str) -> list[Opportunity
     return [
         opportunity
         for opportunity in opportunities
-        if opportunity.fit and opportunity.fit.recommended_action == action
+        if opportunity.fit
+        and opportunity.fit.recommended_action == action
+        and opportunity.metadata.get("application_status") != "removed"
     ]
+
+
+def format_application_status(opportunity: Opportunity) -> str:
+    """Return reader-facing application workflow text when present."""
+    status = opportunity.metadata.get("application_status", "")
+    return _APPLICATION_STATUS_LABELS.get(status, "")
+
+
+def render_application_status_html(opportunity: Opportunity) -> str:
+    """Render compact application state and an optional Drive link."""
+    status = opportunity.metadata.get("application_status", "")
+    label = _APPLICATION_STATUS_LABELS.get(status)
+    if not label:
+        return ""
+    ready = status in {"materials_ready", "preview_ready"}
+    color = "#166534" if ready else "#92400e"
+    background = "#dcfce7" if ready else "#fef3c7"
+    drive_url = opportunity.metadata.get("application_drive_url", "")
+    link = ""
+    if drive_url:
+        link = (
+            f' &middot; <a href="{escape(drive_url)}" '
+            f'style="color:{_BRAND_DARK};font-weight:700;text-decoration:none;">Open files</a>'
+        )
+    return (
+        f'<div style="margin-top:8px;font-size:12px;color:{color};">'
+        f'<span style="display:inline-block;background:{background};padding:3px 8px;'
+        f'border-radius:4px;font-weight:700;">{escape(label)}</span>{link}</div>'
+    )
 
 
 def count_action(opportunities: list[Opportunity], action: str) -> int:

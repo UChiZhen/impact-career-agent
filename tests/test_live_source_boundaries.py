@@ -240,7 +240,7 @@ def test_linkedin_search_source_fetches_from_apify_client_boundary():
                     "companyName": "Example Capital",
                     "location": "Chicago, IL",
                     "postedAt": "2026-06-17",
-                    "description": "Impact investing role",
+                    "descriptionText": "Impact investing role with full job details.",
                 },
                 {
                     "jobUrl": "https://www.linkedin.com/jobs/view/123456/?trackingId=duplicate",
@@ -274,11 +274,13 @@ def test_linkedin_search_source_fetches_from_apify_client_boundary():
     assert client.actor_calls[0]["actor_id"] == "curious_coder~linkedin-jobs-scraper"
     assert client.actor_calls[0]["timeout_secs"] == 30
     assert client.actor_calls[0]["run_input"]["maxItems"] == 10
-    assert client.actor_calls[0]["run_input"]["scrapeJobDetails"] is False
+    assert "scrapeJobDetails" not in client.actor_calls[0]["run_input"]
     assert opportunities[0].source == "linkedin_search"
     assert opportunities[0].source_detail == "apify_keyword"
     assert opportunities[0].company == "Example Capital"
     assert opportunities[0].job_url == "https://www.linkedin.com/jobs/view/123456/"
+    assert opportunities[0].description == "Impact investing role with full job details."
+    assert opportunities[0].metadata["description_source"] == "apify_detail"
     assert opportunities[0].search_keyword == "impact investing analyst"
     assert opportunities[0].search_region == "united_states"
     assert opportunities[1].company == "Example Green Bank"

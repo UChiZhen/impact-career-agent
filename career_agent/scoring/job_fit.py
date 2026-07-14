@@ -19,6 +19,8 @@ apply_now only when the role is a strong fit. Return valid JSON only.
 def build_job_fit_prompt(
     candidate: CandidateProfile,
     opportunities: list[Opportunity],
+    *,
+    description_limit: int = 1200,
 ) -> str:
     """Build a provider-agnostic job-fit prompt."""
     jobs_payload = [
@@ -27,7 +29,7 @@ def build_job_fit_prompt(
             "company": job.company,
             "location": job.location,
             "job_url": job.job_url,
-            "description": job.description[:1200],
+            "description": job.description[:description_limit],
             "source": job.source,
         }
         for job in opportunities
@@ -80,12 +82,18 @@ def score_opportunities(
     opportunities: list[Opportunity],
     candidate: CandidateProfile,
     provider: LLMProvider,
+    *,
+    description_limit: int = 1200,
 ) -> list[Opportunity]:
     """Score opportunities with an LLM provider."""
     if not opportunities:
         return []
 
-    prompt = build_job_fit_prompt(candidate, opportunities)
+    prompt = build_job_fit_prompt(
+        candidate,
+        opportunities,
+        description_limit=description_limit,
+    )
     response = provider.generate(prompt, system=JOB_FIT_SYSTEM_PROMPT)
     payload = response.json_array()
 
@@ -104,10 +112,17 @@ def score_opportunities_with_fallback(
     opportunities: list[Opportunity],
     candidate: CandidateProfile,
     provider: LLMProvider,
+    *,
+    description_limit: int = 1200,
 ) -> list[Opportunity]:
     """Score opportunities with an LLM provider, falling back locally on failure."""
     try:
-        scored = score_opportunities(opportunities, candidate, provider)
+        scored = score_opportunities(
+            opportunities,
+            candidate,
+            provider,
+            description_limit=description_limit,
+        )
         return [
             opportunity.model_copy(
                 update={"metadata": {**opportunity.metadata, "scoring_source": "llm"}}
@@ -170,8 +185,9 @@ def fallback_score_opportunity(
         for level in candidate.preferred_levels
         if level
     )
+    title_text = opportunity.job_title.lower()
     excluded_hit = any(
-        keyword.lower() in combined_text
+        keyword.lower() in title_text
         for keyword in candidate.excluded_keywords
         if keyword
     )

@@ -291,11 +291,20 @@ career-agent scan-jobs \
 ```
 
 `scan-jobs --draft-applications N` selects the top `apply_now` opportunities
-after scoring and drafts packets for those roles. If the user has not requested
-LLM scoring with `--score`, local fallback scoring is applied first so packet
-generation still has a score, action, and resume angle. The default
-application output is `preview`, which does not write files or call Google
-services.
+after initial scoring, verifies that each role has a complete job description,
+and scores the enriched role again before drafting. LinkedIn alert URLs use a
+public guest-page enrichment path; Apify search results retain the actor's full
+`descriptionText` when it is available; public employer pages prefer
+`JobPosting` JSON-LD and then visible page text. Roles that remain incomplete
+are marked `needs_jd` and do not generate application materials.
+
+The packet limit counts successful drafts. By default the scanner can inspect
+up to twice that number of `apply_now` candidates so an incomplete or removed
+posting does not consume a packet slot. Use `--max-jd-enrichment-attempts` to
+set a stricter request budget. If the user has not requested LLM scoring with
+`--score`, local fallback scoring is applied first; the complete-JD rescore uses
+the selected scoring provider. The default application output is `preview`,
+which does not write files or call Google services.
 
 Authenticated users can keep the same packets in Drive and write tracker rows:
 
