@@ -256,6 +256,11 @@ career-agent draft-application \
   --token-path ~/jobsearch/job-radar/config/token.json
 ```
 
+For recurring `scan-jobs` runs, the tracker is also the idempotency store. The
+pipeline skips Gemini generation when the packet ID and JD hash already match,
+then continues to the next eligible role. Changed JDs update the same row;
+`--force-regenerate` is available for an intentional refresh.
+
 PDF rendering is optional. It requires LibreOffice locally. Hosted workflows can
 pin LibreOffice in the runtime image and make PDF output more reliable.
 

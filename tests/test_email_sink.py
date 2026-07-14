@@ -115,6 +115,23 @@ def test_digest_shows_application_status_and_drive_link():
     assert "Open files" in digest["html"]
 
 
+def test_digest_shows_already_generated_materials_as_ready():
+    existing = scored_opportunity("Impact Analyst", "apply_now", 88).model_copy(
+        update={
+            "metadata": {
+                "application_status": "already_generated",
+                "application_drive_url": "https://drive.google.com/drive/folders/existing",
+            }
+        }
+    )
+
+    digest = render_job_digest([existing], {"deduped_total": 1})
+
+    assert "Application materials already available" in digest["text"]
+    assert "Application materials already available" in digest["html"]
+    assert "Open files" in digest["html"]
+
+
 def test_digest_hides_removed_application_opportunities():
     removed = scored_opportunity("Closed Role", "apply_now", 88).model_copy(
         update={"metadata": {"application_status": "removed"}}

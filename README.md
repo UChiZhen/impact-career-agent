@@ -255,7 +255,7 @@ Drive by default.
 For recurring automation, add `--replace-existing` to update files with the same
 names in the packet folder instead of uploading duplicates.
 
-Power users who keep an application tracker in Google Sheets can also append a
+Power users who keep an application tracker in Google Sheets can also write a
 status row after packet generation:
 
 ```bash
@@ -269,8 +269,9 @@ career-agent draft-application \
 The tracker tab defaults to `Application Tracker`; it is created when missing,
 and an empty header row is initialized automatically. It records packet
 metadata, fit score, recommended action, Drive folder URL, user-facing
-filenames, job URL, and source. Set `GOOGLE_APPLICATION_TRACKER_SHEET_ID` for
-unattended runs.
+filenames, job URL, source, JD content hash, and application status. Existing
+14-column tracker headers are extended automatically without changing data
+rows. Set `GOOGLE_APPLICATION_TRACKER_SHEET_ID` for unattended runs.
 
 Use Gemini explicitly when you want a live LLM draft:
 
@@ -305,6 +306,13 @@ set a stricter request budget. If the user has not requested LLM scoring with
 `--score`, local fallback scoring is applied first; the complete-JD rescore uses
 the selected scoring provider. The default application output is `preview`,
 which does not write files or call Google services.
+
+When a tracker is configured for a non-preview run, `scan-jobs` checks the
+stable packet ID and JD content hash before calling the application LLM. An
+unchanged packet is marked as already available, reuses its Drive link, and
+does not consume the successful-draft limit. A changed JD regenerates the
+materials and updates the existing tracker row instead of appending a
+duplicate. Use `--force-regenerate` for an intentional same-JD refresh.
 
 Authenticated users can keep the same packets in Drive and write tracker rows:
 

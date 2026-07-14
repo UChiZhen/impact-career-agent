@@ -13,7 +13,7 @@ import yaml
 
 from career_agent import __version__
 from career_agent.applications import LocalApplicationPacketSink, generate_application_packet
-from career_agent.core import FitScore, Opportunity
+from career_agent.core import ApplicationPacket, FitScore, Opportunity
 from career_agent.demo import (
     DEFAULT_CONFIG_PATH,
     load_candidate_profile,
@@ -611,6 +611,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Update existing Drive packet files with the same names instead of duplicating.",
     )
     jobs_parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        help=(
+            "Regenerate application materials even when the tracker already has the "
+            "same packet and job-description version."
+        ),
+    )
+    jobs_parser.add_argument(
         "--tracker-sheet-id",
         help="Optional Google Sheet ID for application tracker write-back.",
     )
@@ -768,21 +776,34 @@ def write_application_tracker_if_requested(
     drive_result=None,
 ):
     """Append packet metadata to a Google Sheet when configured."""
-    spreadsheet_id = args.tracker_sheet_id or os.getenv("GOOGLE_APPLICATION_TRACKER_SHEET_ID")
-    if not spreadsheet_id:
+    tracker = application_tracker_from_args(args)
+    if not tracker:
         return None
-    tracker = GoogleSheetsApplicationTracker(
-        GoogleSheetsTrackerConfig(
-            spreadsheet_id=spreadsheet_id,
-            sheet_name=args.tracker_sheet_name,
-            credentials_path=args.credentials_path or os.getenv("GOOGLE_CREDENTIALS_PATH"),
-            token_path=args.token_path or os.getenv("GOOGLE_TOKEN_PATH"),
-        )
-    )
     return tracker.write_packet(
         packet,
         output_result=output_result,
         drive_result=drive_result,
+        force=getattr(args, "force_regenerate", False),
+    )
+
+
+def application_tracker_from_args(
+    args: argparse.Namespace,
+) -> GoogleSheetsApplicationTracker | None:
+    """Build the optional tracker without exposing its private spreadsheet ID."""
+    spreadsheet_id = getattr(args, "tracker_sheet_id", None) or os.getenv(
+        "GOOGLE_APPLICATION_TRACKER_SHEET_ID"
+    )
+    if not spreadsheet_id:
+        return None
+    return GoogleSheetsApplicationTracker(
+        GoogleSheetsTrackerConfig(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=getattr(args, "tracker_sheet_name", "Application Tracker"),
+            credentials_path=getattr(args, "credentials_path", None)
+            or os.getenv("GOOGLE_CREDENTIALS_PATH"),
+            token_path=getattr(args, "token_path", None) or os.getenv("GOOGLE_TOKEN_PATH"),
+        )
     )
 
 
@@ -1461,6 +1482,11 @@ def draft_application_packets_for_scan(
     candidate = load_candidate_profile(Path(args.candidate_profile))
     master_resume = load_master_resume(Path(args.master_resume))
     candidate = candidate.model_copy(update={"master_resume": master_resume})
+    tracker_packets = {}
+    if args.application_output != "preview":
+        tracker = application_tracker_from_args(args)
+        if tracker:
+            tracker_packets = tracker.list_packets()
     packet_limit = max(0, args.draft_applications)
     configured_attempts = getattr(args, "max_jd_enrichment_attempts", None)
     attempt_limit = max(
@@ -1480,6 +1506,7 @@ def draft_application_packets_for_scan(
         "application_needs_jd": 0,
         "application_removed": 0,
         "application_not_apply_after_jd": 0,
+        "application_already_generated": 0,
     }
     for opportunity in selected:
         if len(results) >= packet_limit:
@@ -1512,6 +1539,25 @@ def draft_application_packets_for_scan(
                 rescored,
                 "review_after_jd",
             )
+            continue
+
+        packet_identity = ApplicationPacket(
+            opportunity=rescored,
+            candidate_name=candidate.name,
+        ).packet_id
+        existing_packet = tracker_packets.get(packet_identity)
+        current_jd_hash = rescored.metadata.get("jd_content_hash", "")
+        if (
+            existing_packet
+            and current_jd_hash
+            and existing_packet.jd_content_hash == current_jd_hash
+            and not getattr(args, "force_regenerate", False)
+        ):
+            summary["application_already_generated"] += 1
+            status_metadata = {"application_status": "already_generated"}
+            if existing_packet.drive_folder_url:
+                status_metadata["application_drive_url"] = existing_packet.drive_folder_url
+            updates[opportunity.dedup_key] = with_metadata(rescored, **status_metadata)
             continue
 
         provider = application_provider_from_args(args, rescored, candidate)

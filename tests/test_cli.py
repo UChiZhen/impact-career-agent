@@ -14,7 +14,8 @@ from career_agent.cli.main import (
     main,
     mock_score_response,
 )
-from career_agent.core import FitScore, Opportunity
+from career_agent.core import ApplicationPacket, FitScore, Opportunity
+from career_agent.sinks.google_sheets import TrackerPacketState
 from career_agent.sources.job_descriptions import (
     JobDescriptionEnrichmentResult,
     JobDescriptionQuality,
@@ -640,6 +641,174 @@ def test_application_batch_tries_next_candidate_after_missing_jd(monkeypatch):
     assert batch.opportunities[1].metadata["application_status"] == "preview_ready"
 
 
+def test_application_batch_skips_existing_packet_and_tries_next_candidate(monkeypatch):
+    first = Opportunity(
+        source="linkedin_search",
+        company="Already Generated Fund",
+        job_title="Impact Analyst",
+        job_url="https://example.org/jobs/existing",
+        description="Responsibilities and qualifications for impact investing. " * 30,
+        metadata={"jd_content_hash": "jd-existing"},
+        fit=FitScore(total=92, recommended_action="apply_now"),
+    )
+    second = Opportunity(
+        source="linkedin_search",
+        company="New Opportunity Fund",
+        job_title="Investment Analyst",
+        job_url="https://example.org/jobs/new",
+        description="Responsibilities and qualifications for mission investing. " * 30,
+        metadata={"jd_content_hash": "jd-new"},
+        fit=FitScore(total=88, recommended_action="apply_now"),
+    )
+    existing_packet_id = ApplicationPacket(
+        opportunity=first,
+        candidate_name="Jane Doe",
+    ).packet_id
+    generated = []
+
+    class FakeTracker:
+        def __init__(self, config):
+            self.config = config
+
+        def list_packets(self):
+            return {
+                existing_packet_id: TrackerPacketState(
+                    packet_id=existing_packet_id,
+                    row_number=2,
+                    jd_content_hash="jd-existing",
+                    drive_folder_url="https://drive.google.com/drive/folders/existing",
+                )
+            }
+
+    def complete_enrichment(opportunity):
+        return JobDescriptionEnrichmentResult(
+            opportunity=opportunity,
+            status="existing",
+            source="source_description",
+            content_hash=opportunity.metadata["jd_content_hash"],
+            quality=JobDescriptionQuality(True, len(opportunity.description), 150),
+        )
+
+    def generate_packet(opportunity, candidate, provider):
+        generated.append(opportunity.company)
+        return ApplicationPacket(opportunity=opportunity, candidate_name=candidate.name)
+
+    monkeypatch.setattr("career_agent.cli.main.GoogleSheetsApplicationTracker", FakeTracker)
+    monkeypatch.setattr("career_agent.cli.main.enrich_job_description", complete_enrichment)
+    monkeypatch.setattr(
+        "career_agent.cli.main.score_opportunities_with_fallback",
+        lambda opportunities, candidate, provider, description_limit: opportunities,
+    )
+    monkeypatch.setattr("career_agent.cli.main.generate_application_packet", generate_packet)
+    monkeypatch.setattr(
+        "career_agent.cli.main.persist_application_packet",
+        lambda *args, **kwargs: (None, None, None),
+    )
+    args = SimpleNamespace(
+        candidate_profile="examples/sample_data/candidate_profile.yaml",
+        master_resume="examples/sample_data/master_resume.yaml",
+        draft_applications=1,
+        max_jd_enrichment_attempts=2,
+        score_provider="mock",
+        application_provider="mock",
+        application_output="local",
+        application_output_dir="application_packets",
+        render_pdf=False,
+        debug_output=False,
+        tracker_sheet_id="sheet-123",
+        tracker_sheet_name="Application Tracker",
+        credentials_path=None,
+        token_path=None,
+        force_regenerate=False,
+    )
+
+    batch = draft_application_packets_for_scan(args, [first, second])
+
+    assert generated == ["New Opportunity Fund"]
+    assert len(batch.results) == 1
+    assert batch.summary["application_already_generated"] == 1
+    assert batch.summary["application_jd_attempted"] == 2
+    assert batch.opportunities[0].metadata["application_status"] == "already_generated"
+    assert batch.opportunities[0].metadata["application_drive_url"].endswith("/existing")
+    assert batch.opportunities[1].metadata["application_status"] == "materials_ready"
+
+
+def test_application_batch_force_regenerates_existing_packet(monkeypatch):
+    opportunity = Opportunity(
+        source="linkedin_search",
+        company="Changed Fund",
+        job_title="Impact Analyst",
+        job_url="https://example.org/jobs/force",
+        description="Responsibilities and qualifications for impact investing. " * 30,
+        metadata={"jd_content_hash": "jd-v1"},
+        fit=FitScore(total=90, recommended_action="apply_now"),
+    )
+    packet_id = ApplicationPacket(
+        opportunity=opportunity,
+        candidate_name="Jane Doe",
+    ).packet_id
+    generated = []
+
+    class FakeTracker:
+        def __init__(self, config):
+            self.config = config
+
+        def list_packets(self):
+            return {
+                packet_id: TrackerPacketState(
+                    packet_id=packet_id,
+                    row_number=2,
+                    jd_content_hash="jd-v1",
+                )
+            }
+
+    monkeypatch.setattr("career_agent.cli.main.GoogleSheetsApplicationTracker", FakeTracker)
+    monkeypatch.setattr(
+        "career_agent.cli.main.enrich_job_description",
+        lambda item: JobDescriptionEnrichmentResult(
+            opportunity=item,
+            status="existing",
+            source="source_description",
+            content_hash="jd-v1",
+            quality=JobDescriptionQuality(True, len(item.description), 150),
+        ),
+    )
+    monkeypatch.setattr(
+        "career_agent.cli.main.score_opportunities_with_fallback",
+        lambda opportunities, candidate, provider, description_limit: opportunities,
+    )
+
+    def generate_packet(item, candidate, provider):
+        generated.append(item.company)
+        return ApplicationPacket(opportunity=item, candidate_name=candidate.name)
+
+    monkeypatch.setattr("career_agent.cli.main.generate_application_packet", generate_packet)
+    monkeypatch.setattr(
+        "career_agent.cli.main.persist_application_packet",
+        lambda *args, **kwargs: (None, None, None),
+    )
+    args = SimpleNamespace(
+        candidate_profile="examples/sample_data/candidate_profile.yaml",
+        master_resume="examples/sample_data/master_resume.yaml",
+        draft_applications=1,
+        max_jd_enrichment_attempts=1,
+        score_provider="mock",
+        application_provider="mock",
+        application_output="local",
+        tracker_sheet_id="sheet-123",
+        tracker_sheet_name="Application Tracker",
+        credentials_path=None,
+        token_path=None,
+        force_regenerate=True,
+    )
+
+    batch = draft_application_packets_for_scan(args, [opportunity])
+
+    assert generated == ["Changed Fund"]
+    assert len(batch.results) == 1
+    assert batch.summary["application_already_generated"] == 0
+
+
 def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
     calls = {}
 
@@ -684,9 +853,20 @@ def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
         def __init__(self, config):
             calls["tracker_config"] = config
 
-        def write_packet(self, packet, *, output_result=None, drive_result=None):
+        def list_packets(self):
+            return {}
+
+        def write_packet(
+            self,
+            packet,
+            *,
+            output_result=None,
+            drive_result=None,
+            force=False,
+        ):
             calls["tracker_packet"] = packet.packet_id
             calls["tracker_drive_url"] = drive_result.folder_url
+            calls["tracker_force"] = force
             return SimpleNamespace(sheet_name="Application Tracker", rows_written=1)
 
     monkeypatch.setattr("career_agent.cli.main.LocalApplicationPacketSink", FakeLocalSink)
@@ -976,7 +1156,14 @@ def test_draft_application_tracker_sheet_writeback(monkeypatch):
         def __init__(self, config):
             calls["tracker_config"] = config
 
-        def write_packet(self, packet, *, output_result=None, drive_result=None):
+        def write_packet(
+            self,
+            packet,
+            *,
+            output_result=None,
+            drive_result=None,
+            force=False,
+        ):
             calls["tracker_packet"] = packet.packet_id
             calls["tracker_drive_url"] = drive_result.folder_url
             return SimpleNamespace(sheet_name="Application Tracker", rows_written=1)

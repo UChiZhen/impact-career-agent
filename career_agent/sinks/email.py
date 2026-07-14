@@ -272,6 +272,7 @@ _SIGNAL_ACTION_LABELS = {
 
 _APPLICATION_STATUS_LABELS = {
     "needs_jd": "Needs full job description",
+    "already_generated": "Application materials already available",
     "materials_ready": "Application materials ready",
     "preview_ready": "Application preview ready",
     "review_after_jd": "Review after full job description",
@@ -509,7 +510,7 @@ def render_application_status_html(opportunity: Opportunity) -> str:
     label = _APPLICATION_STATUS_LABELS.get(status)
     if not label:
         return ""
-    ready = status in {"materials_ready", "preview_ready"}
+    ready = status in {"already_generated", "materials_ready", "preview_ready"}
     color = "#166534" if ready else "#92400e"
     background = "#dcfce7" if ready else "#fef3c7"
     drive_url = opportunity.metadata.get("application_drive_url", "")

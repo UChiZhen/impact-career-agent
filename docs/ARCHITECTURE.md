@@ -272,12 +272,15 @@ materials. Local debug files such as `resume.json`, `cover_letter.json`, and
 Drive by default. Recurring automation can enable replace-existing behavior so
 reruns update same-named packet files instead of creating duplicate Drive files.
 
-Application tracker write-back appends one row to a user-provided Google Sheet.
+Application tracker write-back upserts one row in a user-provided Google Sheet.
 The default tab is `Application Tracker`; the schema includes packet metadata,
 company, role, location, fit score, recommended action, Drive folder URL,
-user-facing file names, job URL, and source. The tab is created when missing,
-and an empty header row is initialized automatically. This is an opt-in sink and
-should not be required for local-first onboarding.
+user-facing file names, job URL, source, JD content hash, and application
+status. The tab is created when missing, and legacy 14-column headers are
+extended in place. Before application generation, a non-preview scan reads this
+state: matching packet ID and JD hash means reuse, while a changed JD updates
+the existing row after regeneration. This is an opt-in sink and should not be
+required for local-first onboarding.
 
 In v0.1, credential-free fixture sources remain the default runnable
 implementation. Live sources are opt-in behind optional dependencies and local
