@@ -268,6 +268,18 @@ pin LibreOffice in the runtime image and make PDF output more reliable.
 
 Only move to cloud automation after the local pipeline works.
 
+The repository includes `first-user-smoke.yml` as the first cloud boundary.
+It is manual-only, runs on `main`, has read-only repository permission, and
+does not reference a GitHub Environment or any Secrets. It runs the fictional
+demo pipeline with network access blocked for the smoke commands, uses mock
+providers and preview output, and verifies that no private or generated files
+were created. Start it from **Actions > first-user-smoke > Run workflow**.
+
+Passing this workflow proves that the package can run on an ephemeral Linux
+runner. It does not authorize Gmail, Gemini, Apify, Drive, or Sheets and does
+not send email. Keep this credential-free workflow separate when adding a
+later, manually approved `first-user-live-smoke` workflow.
+
 Recommended first behavior:
 
 - Add `workflow_dispatch` before adding a schedule.

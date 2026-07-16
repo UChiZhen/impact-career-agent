@@ -1,0 +1,101 @@
+name: first-user-smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-user-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  credential-free-smoke:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out the public repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install credential-free development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Confirm private settings are unavailable
+        run: |
+          private_names=(
+            GEMINI_API_KEY
+            OPENAI_API_KEY
+            APIFY_API_TOKEN
+            GOOGLE_CREDENTIALS_JSON
+            GOOGLE_TOKEN_JSON
+            GOOGLE_SHEET_ID
+            GOOGLE_APPLICATION_TRACKER_SHEET_ID
+            GMAIL_RECIPIENT
+            PRIVATE_CANDIDATE_PROFILE_YAML
+            PRIVATE_MASTER_RESUME_YAML
+            PRIVATE_LINKEDIN_SEARCHES_YAML
+          )
+
+          for name in "${private_names[@]}"; do
+            if [[ -n "${!name-}" ]]; then
+              echo "::error::Private setting $name must not be available to this workflow."
+              exit 1
+            fi
+          done
+
+          test ! -e private
+
+      - name: Run lint and tests
+        run: |
+          ruff check .
+          pytest
+
+      - name: Run credential-free pipeline smoke
+        env:
+          HTTP_PROXY: http://127.0.0.1:9
+          HTTPS_PROXY: http://127.0.0.1:9
+          ALL_PROXY: http://127.0.0.1:9
+          NO_PROXY: ""
+        run: |
+          career-agent demo
+          career-agent scan-news
+          career-agent scan-linkedin-search \
+            --searches examples/sample_data/linkedin_searches.yaml \
+            --weekday 0 \
+            --query-limit 1 \
+            --limit 1
+          career-agent scan-jobs \
+            --config examples/demo_config.yaml \
+            --score \
+            --score-provider mock \
+            --candidate-profile examples/sample_data/candidate_profile.yaml \
+            --draft-applications 1 \
+            --application-provider mock \
+            --master-resume examples/sample_data/master_resume.yaml \
+            --application-output preview
+
+      - name: Confirm smoke run left no private or generated files
+        run: |
+          test ! -e private
+          test ! -e application_packets
+          test -z "$(git status --porcelain --untracked-files=all)"
