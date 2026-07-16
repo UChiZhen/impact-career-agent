@@ -1106,16 +1106,25 @@ def run_news_scan(args: argparse.Namespace) -> str:
         source_summary["health_failed"] = sum(1 for result in health_results if not result.ok)
 
     if args.rss_live:
-        rss_signals = RSSNewsSource(
+        rss_result = RSSNewsSource(
             RSSNewsSourceConfig(
                 feeds=source_pack.rss_feeds,
                 user_agent=args.user_agent
                 or os.getenv("IMPACT_CAREER_USER_AGENT")
                 or "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
             )
-        ).fetch()
+        ).fetch_with_health()
+        rss_signals = list(rss_result.signals)
         signals.extend(rss_signals)
         source_summary["rss_news"] = len(rss_signals)
+        source_summary["rss_sources_ok"] = sum(
+            1 for result in rss_result.health_results if result.ok
+        )
+        source_summary["rss_sources_failed"] = sum(
+            1 for result in rss_result.health_results if not result.ok
+        )
+        if not args.health_check:
+            health_results.extend(result for result in rss_result.health_results if not result.ok)
 
     if args.impactalpha_eml:
         eml_path = Path(args.impactalpha_eml).expanduser()
@@ -1342,15 +1351,22 @@ def fetch_and_score_signals_for_job_scan(args: argparse.Namespace):
     }
 
     if args.news_rss_live:
-        rss_signals = RSSNewsSource(
+        rss_result = RSSNewsSource(
             RSSNewsSourceConfig(
                 feeds=source_pack.rss_feeds,
                 user_agent=os.getenv("IMPACT_CAREER_USER_AGENT")
                 or "ImpactCareerAgent/0.1 (+https://github.com/UChiZhen)",
             )
-        ).fetch()
+        ).fetch_with_health()
+        rss_signals = list(rss_result.signals)
         signals.extend(rss_signals)
         source_summary["news_rss"] = len(rss_signals)
+        source_summary["news_rss_sources_ok"] = sum(
+            1 for result in rss_result.health_results if result.ok
+        )
+        source_summary["news_rss_sources_failed"] = sum(
+            1 for result in rss_result.health_results if not result.ok
+        )
 
     if args.news_impactalpha_email_live:
         env_config = ImpactAlphaNewsletterConfig.from_env()

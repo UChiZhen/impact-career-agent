@@ -2,12 +2,15 @@ import base64
 from email.message import EmailMessage
 import os
 from pathlib import Path
+from urllib.error import URLError
 
 from career_agent.sources.news import (
     IMPACTALPHA_SENDER,
     ImpactAlphaNewsletterConfig,
     NewsFeedConfig,
     NewsSourcePack,
+    RSSNewsSource,
+    RSSNewsSourceConfig,
     check_source_pack_health,
     classify_capital_signal,
     load_news_source_pack,
@@ -23,7 +26,8 @@ def test_load_impact_capital_signal_source_pack():
 
     assert source_pack.name == "impact_capital_signals"
     assert "impact_investing" in source_pack.verticals
-    assert len(source_pack.rss_feeds) >= 2
+    assert len(source_pack.rss_feeds) == 4
+    assert all(feed.name != "ImpactAlpha" for feed in source_pack.rss_feeds)
     assert any(source["name"] == "SEC Form D" for source in source_pack.regulatory_sources)
 
 
@@ -92,6 +96,33 @@ def test_check_source_pack_health_parses_rss_and_checks_metadata_urls(monkeypatc
     assert all(result.ok for result in results)
     assert results[0].source_group == "rss_feeds"
     assert results[0].item_count == 1
+
+
+def test_rss_source_isolates_feed_failures_and_reports_health(monkeypatch):
+    feeds = (
+        NewsFeedConfig(name="Working Feed", url="https://example.org/working.xml"),
+        NewsFeedConfig(name="Blocked Feed", url="https://example.org/blocked.xml"),
+    )
+    xml = """
+    <rss><channel><item>
+      <title>Fund closes new vehicle</title>
+      <link>https://example.org/item</link>
+    </item></channel></rss>
+    """
+
+    def fake_fetch(url, *, timeout_seconds, user_agent, max_bytes=None):
+        if url.endswith("blocked.xml"):
+            raise URLError("blocked by source")
+        return xml, 200
+
+    monkeypatch.setattr("career_agent.sources.news.fetch_text_url", fake_fetch)
+
+    result = RSSNewsSource(RSSNewsSourceConfig(feeds=feeds)).fetch_with_health()
+
+    assert len(result.signals) == 1
+    assert [health.ok for health in result.health_results] == [True, False]
+    assert result.health_results[0].item_count == 1
+    assert result.health_results[1].error == "blocked by source"
 
 
 def test_parse_impactalpha_newsletter_html_extracts_content_links():

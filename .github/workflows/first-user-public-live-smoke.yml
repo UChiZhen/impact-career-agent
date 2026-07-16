@@ -75,8 +75,16 @@ jobs:
               --score-provider mock \
               --max-signals 5 \
               --top-signals 5 >"${output_file}"; then
-              fetch_succeeded=true
-              break
+              configured_feeds=$(awk -F': ' '$1 == "source_pack_rss_feeds" {print $2}' "${output_file}")
+              healthy_feeds=$(awk -F': ' '$1 == "rss_sources_ok" {print $2}' "${output_file}")
+              failed_feeds=$(awk -F': ' '$1 == "rss_sources_failed" {print $2}' "${output_file}")
+
+              if [[ "${configured_feeds}" == "4" \
+                && "${healthy_feeds}" == "${configured_feeds}" \
+                && "${failed_feeds}" == "0" ]]; then
+                fetch_succeeded=true
+                break
+              fi
             fi
 
             if [[ "${attempt}" -lt 2 ]]; then
@@ -85,18 +93,22 @@ jobs:
             fi
           done
 
+          cat "${output_file}"
+
           if [[ "${fetch_succeeded}" != "true" ]]; then
             echo "::error::The default public RSS pack failed after two attempts."
             exit 1
           fi
 
-          cat "${output_file}"
-
           configured_feeds=$(awk -F': ' '$1 == "source_pack_rss_feeds" {print $2}' "${output_file}")
           fetched_signals=$(awk -F': ' '$1 == "rss_news" {print $2}' "${output_file}")
+          healthy_feeds=$(awk -F': ' '$1 == "rss_sources_ok" {print $2}' "${output_file}")
+          failed_feeds=$(awk -F': ' '$1 == "rss_sources_failed" {print $2}' "${output_file}")
           selected_signals=$(awk -F': ' '$1 == "signals_selected" {print $2}' "${output_file}")
 
-          [[ "${configured_feeds}" == "2" ]]
+          [[ "${configured_feeds}" == "4" ]]
+          [[ "${healthy_feeds}" == "${configured_feeds}" ]]
+          [[ "${failed_feeds}" == "0" ]]
           [[ "${fetched_signals}" =~ ^[0-9]+$ && "${fetched_signals}" -gt 0 ]]
           [[ "${selected_signals}" =~ ^[0-9]+$ && "${selected_signals}" -gt 0 ]]
           [[ "${selected_signals}" -le 5 ]]

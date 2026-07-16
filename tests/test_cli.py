@@ -928,18 +928,31 @@ def test_format_job_scan_summary_hides_details_by_default():
 
 def test_scan_jobs_can_include_scored_news_signals(monkeypatch):
     from career_agent.core import Signal
+    from career_agent.sources.news import RSSFetchResult, SourceHealthResult
+
+    signals = [
+        Signal(
+            source="Impact Entrepreneur",
+            title=f"Capital signal {index}",
+            signal_subtype="fund_close",
+        )
+        for index in range(7)
+    ]
 
     monkeypatch.setattr(
         "career_agent.cli.main.RSSNewsSource",
         lambda config: SimpleNamespace(
-            fetch=lambda: [
-                Signal(
-                    source="ImpactAlpha",
-                    title=f"Capital signal {index}",
-                    signal_subtype="fund_close",
-                )
-                for index in range(7)
-            ]
+            fetch_with_health=lambda: RSSFetchResult(
+                signals=tuple(signals),
+                health_results=(
+                    SourceHealthResult(
+                        name="Impact Entrepreneur",
+                        url="https://example.org/feed",
+                        source_group="rss_feeds",
+                        ok=True,
+                    ),
+                ),
+            )
         ),
     )
 
@@ -966,6 +979,7 @@ def test_scan_jobs_can_include_scored_news_signals(monkeypatch):
 
 def test_scan_jobs_send_email_includes_news_signals(monkeypatch):
     from career_agent.core import Signal
+    from career_agent.sources.news import RSSFetchResult, SourceHealthResult
 
     sent = {}
 
@@ -995,13 +1009,23 @@ def test_scan_jobs_send_email_includes_news_signals(monkeypatch):
     monkeypatch.setattr(
         "career_agent.cli.main.RSSNewsSource",
         lambda config: SimpleNamespace(
-            fetch=lambda: [
-                Signal(
-                    source="ImpactAlpha",
-                    title="Fund closes new vehicle",
-                    signal_subtype="fund_close",
-                )
-            ]
+            fetch_with_health=lambda: RSSFetchResult(
+                signals=(
+                    Signal(
+                        source="Impact Entrepreneur",
+                        title="Fund closes new vehicle",
+                        signal_subtype="fund_close",
+                    ),
+                ),
+                health_results=(
+                    SourceHealthResult(
+                        name="Impact Entrepreneur",
+                        url="https://example.org/feed",
+                        source_group="rss_feeds",
+                        ok=True,
+                    ),
+                ),
+            )
         ),
     )
 

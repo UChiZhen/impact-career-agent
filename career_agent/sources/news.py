@@ -67,6 +67,14 @@ class SourceHealthResult:
 
 
 @dataclass(frozen=True)
+class RSSFetchResult:
+    """Signals and per-feed health from one public RSS scan."""
+
+    signals: tuple[Signal, ...]
+    health_results: tuple[SourceHealthResult, ...]
+
+
+@dataclass(frozen=True)
 class RSSNewsSourceConfig:
     """Configuration for RSS/Atom fetching."""
 
@@ -84,14 +92,48 @@ class RSSNewsSource:
         self.config = config
 
     def fetch(self) -> list[Signal]:
-        """Fetch all configured RSS/Atom feeds."""
+        """Fetch available RSS/Atom feeds, isolating individual source failures."""
+        return list(self.fetch_with_health().signals)
+
+    def fetch_with_health(self) -> RSSFetchResult:
+        """Fetch feeds and retain a health result for each configured source."""
         signals: list[Signal] = []
+        health_results: list[SourceHealthResult] = []
         for feed in self.config.feeds:
-            request = Request(feed.url, headers={"User-Agent": self.config.user_agent})
-            with urlopen(request, timeout=self.config.timeout_seconds) as response:
-                xml_text = response.read().decode("utf-8", errors="replace")
-            signals.extend(signals_from_rss_xml(xml_text, feed))
-        return dedupe_signals(signals)
+            try:
+                xml_text, status_code = fetch_text_url(
+                    feed.url,
+                    timeout_seconds=self.config.timeout_seconds,
+                    user_agent=self.config.user_agent,
+                )
+                feed_signals = signals_from_rss_xml(xml_text, feed)
+                signals.extend(feed_signals)
+                health_results.append(
+                    SourceHealthResult(
+                        name=feed.name,
+                        url=feed.url,
+                        source_group="rss_feeds",
+                        ok=bool(feed_signals),
+                        status_code=status_code,
+                        item_count=len(feed_signals),
+                        error="" if feed_signals else "rss parsed but returned zero items",
+                    )
+                )
+            except Exception as exc:
+                health_results.append(
+                    SourceHealthResult(
+                        name=feed.name,
+                        url=feed.url,
+                        source_group="rss_feeds",
+                        ok=False,
+                        error=short_error(exc),
+                    )
+                )
+
+        return RSSFetchResult(
+            signals=tuple(dedupe_signals(signals)),
+            health_results=tuple(health_results),
+        )
 
 
 @dataclass(frozen=True)

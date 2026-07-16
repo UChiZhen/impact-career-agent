@@ -282,7 +282,7 @@ later, manually approved `first-user-live-smoke` workflow.
 
 The next boundary is `first-user-public-live-smoke.yml`. It is also
 manual-only, read-only, and secret-free, but permits outbound requests to the
-two RSS feeds in the default source pack. The workflow uses mock scoring,
+four RSS feeds in the default source pack. The workflow uses mock scoring,
 selects at most five signals, prints counts rather than signal titles, retries
 one transient fetch failure, and verifies that it created no private files or
 application packets. Start it from

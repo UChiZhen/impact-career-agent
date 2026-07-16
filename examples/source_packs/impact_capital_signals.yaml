@@ -6,14 +6,22 @@ verticals:
   - community_finance
 
 rss_feeds:
-  - name: ImpactAlpha
-    url: https://impactalpha.com/feed/
+  - name: Impact Entrepreneur
+    url: https://impactentrepreneur.com/feed/
     category: impact_investing
     vertical: impact_investing
   - name: NextBillion
     url: https://nextbillion.net/feed/
     category: impact_investing
     vertical: impact_investing
+  - name: IIX Global
+    url: https://iixglobal.com/feed/
+    category: impact_investing
+    vertical: development_finance
+  - name: Green Finance Institute
+    url: https://www.greenfinanceinstitute.com/feed/
+    category: climate_finance
+    vertical: climate_finance
 
 web_sources:
   - name: GIIN
