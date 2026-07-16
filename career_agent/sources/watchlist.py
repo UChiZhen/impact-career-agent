@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from career_agent.google_auth import load_stored_google_credentials
 from career_agent.sources.opportunities import Organization
 
 
@@ -86,10 +87,7 @@ class GoogleSheetsOrganizationSource:
 
         credentials = None
         if token_path.exists():
-            credentials = Credentials.from_authorized_user_file(
-                str(token_path),
-                JOB_RADAR_GOOGLE_SCOPES,
-            )
+            credentials = load_stored_google_credentials(Credentials, token_path)
 
         if credentials and credentials.valid:
             return credentials

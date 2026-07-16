@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 import yaml
 
 from career_agent.core import Signal
+from career_agent.google_auth import load_stored_google_credentials
 from career_agent.sources.linkedin_email import (
     GMAIL_READONLY_SCOPES,
     extract_email_message_body,
@@ -245,7 +246,7 @@ class ImpactAlphaNewsletterSource:
 
         credentials = None
         if token_path.exists():
-            credentials = Credentials.from_authorized_user_file(str(token_path), GMAIL_READONLY_SCOPES)
+            credentials = load_stored_google_credentials(Credentials, token_path)
 
         if credentials and credentials.valid:
             return credentials

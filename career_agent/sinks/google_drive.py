@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from career_agent.google_auth import load_stored_google_credentials
 from career_agent.sources.watchlist import JOB_RADAR_GOOGLE_SCOPES, resolve_path
 
 
@@ -108,10 +109,7 @@ class GoogleDrivePacketSink:
 
         credentials = None
         if token_path.exists():
-            credentials = Credentials.from_authorized_user_file(
-                str(token_path),
-                JOB_RADAR_GOOGLE_SCOPES,
-            )
+            credentials = load_stored_google_credentials(Credentials, token_path)
 
         if credentials and credentials.valid:
             return credentials
