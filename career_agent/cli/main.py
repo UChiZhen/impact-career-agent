@@ -1154,6 +1154,7 @@ def run_news_scan(args: argparse.Namespace) -> str:
         candidate = load_candidate_profile(Path(args.candidate_profile))
         provider = signal_scoring_provider_from_args(args, signals)
         signals = score_signals(signals, provider, candidate=candidate)
+        source_summary[f"signal_scoring_provider_{args.score_provider}"] = 1
         source_summary.update(signal_score_summary(signals))
         signals = top_signals(signals, limit=args.top_signals)
         source_summary["top_signals"] = len(signals)

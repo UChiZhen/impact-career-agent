@@ -288,6 +288,13 @@ one transient fetch failure, and verifies that it created no private files or
 application packets. Start it from
 **Actions > first-user-public-live-smoke > Run workflow**.
 
+The first workflow that uses a credential is
+`first-user-provider-smoke.yml`. It references a same-named GitHub Environment,
+expects only `GEMINI_API_KEY`, and scores exactly one public RSS signal with
+`gemini-3.1-flash-lite`. It does not receive Google OAuth, Gmail, Drive,
+Sheets, Apify, private profile, or resume settings. Provider stderr is withheld
+from the Actions log, and the workflow does not upload artifacts.
+
 Recommended first behavior:
 
 - Add `workflow_dispatch` before adding a schedule.

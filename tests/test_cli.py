@@ -215,6 +215,47 @@ def test_scan_news_default_is_safe_source_pack_dry_run():
     assert "No live sources selected" in text
 
 
+def test_scan_news_reports_selected_scoring_provider(monkeypatch):
+    from career_agent.core import Signal
+    from career_agent.sources.news import RSSFetchResult, SourceHealthResult
+
+    monkeypatch.setattr(
+        "career_agent.cli.main.RSSNewsSource",
+        lambda config: SimpleNamespace(
+            fetch_with_health=lambda: RSSFetchResult(
+                signals=(Signal(source="Public Feed", title="Fund closes new vehicle"),),
+                health_results=(
+                    SourceHealthResult(
+                        name="Public Feed",
+                        url="https://example.org/feed",
+                        source_group="rss_feeds",
+                        ok=True,
+                    ),
+                ),
+            )
+        ),
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-news",
+                "--rss-live",
+                "--score",
+                "--score-provider",
+                "mock",
+                "--max-signals",
+                "1",
+                "--top-signals",
+                "1",
+            ]
+        )
+
+    assert exit_code == 0
+    assert "signal_scoring_provider_mock: 1" in output.getvalue()
+
+
 def test_scan_news_loads_env_file_for_live_news_settings(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("IMPACTALPHA_NEWSLETTER_SENDER=newsletter@example.com\n")
