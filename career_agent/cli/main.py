@@ -1362,6 +1362,7 @@ def run_job_scan(args: argparse.Namespace) -> str:
         source_summary["application_packets_requested"] = args.draft_applications
         source_summary.update(application_batch.summary)
         source_summary["application_packets_selected"] = len(application_results)
+        source_summary.update(application_output_summary(application_results))
         source_summary.update(score_summary(deduped))
         source_summary.update(scoring_source_summary(deduped))
 
@@ -1906,6 +1907,38 @@ def build_job_scan_review_payload(*, source_summary, opportunities, signals=None
 def compact_review_text(value: str, *, limit: int) -> str:
     """Flatten and cap private review prose for concise downstream display."""
     return " ".join(value.split())[:limit]
+
+
+def application_output_summary(
+    application_results: list[ApplicationDraftResult],
+) -> dict[str, int]:
+    """Count rendered and uploaded document types without exposing file metadata."""
+    summary = {
+        "application_local_packets": 0,
+        "application_local_files_docx": 0,
+        "application_local_files_pdf": 0,
+        "application_drive_packets": 0,
+        "application_drive_files_docx": 0,
+        "application_drive_files_pdf": 0,
+    }
+    for result in application_results:
+        if result.output_result:
+            summary["application_local_packets"] += 1
+            for path in result.output_result.files:
+                suffix = Path(path).suffix.lower()
+                if suffix == ".docx":
+                    summary["application_local_files_docx"] += 1
+                elif suffix == ".pdf":
+                    summary["application_local_files_pdf"] += 1
+        if result.drive_result:
+            summary["application_drive_packets"] += 1
+            for item in result.drive_result.files:
+                suffix = Path(item.get("name", "")).suffix.lower()
+                if suffix == ".docx":
+                    summary["application_drive_files_docx"] += 1
+                elif suffix == ".pdf":
+                    summary["application_drive_files_pdf"] += 1
+    return summary
 
 
 def append_email_send_summary(summary_text: str, send_result: dict) -> str:

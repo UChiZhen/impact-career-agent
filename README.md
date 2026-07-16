@@ -137,7 +137,9 @@ rows in the terminal.
 Private runners can request `--output-format json` for a ranked, whitelisted
 review payload. It includes role metadata, score, action, short reason, and
 application status, while excluding job-description text, candidate data, and
-resume or cover-letter content.
+resume or cover-letter content. When application output is enabled, the summary
+also reports DOCX/PDF counts without file names, Drive IDs, or folder URLs so a
+private runner can enforce complete output.
 
 Scheduled personal runners can pass `--rotation-date YYYY-MM-DD` to distribute
 bounded source scans over time. Watchlist batches advance daily, LinkedIn

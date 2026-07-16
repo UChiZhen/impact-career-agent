@@ -9,6 +9,8 @@ import pytest
 
 from career_agent import __version__
 from career_agent.cli.main import (
+    ApplicationDraftResult,
+    application_output_summary,
     draft_application_packets_for_scan,
     fetch_linkedin_search_opportunities_for_job_scan,
     format_job_scan_summary,
@@ -1190,6 +1192,41 @@ def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
     assert calls["tracker_drive_url"] == "https://drive.google.com/drive/folders/folder-1"
     assert "drive: https://drive.google.com/drive/folders/folder-1" in text
     assert "tracker: Application Tracker (1 row)" in text
+
+
+def test_application_output_summary_counts_types_without_file_metadata():
+    result = ApplicationDraftResult(
+        packet=object(),
+        output_result=SimpleNamespace(
+            files=[
+                Path("resume.docx"),
+                Path("resume.pdf"),
+                Path("cover_letter.docx"),
+                Path("cover_letter.pdf"),
+                Path("manifest.json"),
+            ]
+        ),
+        drive_result=SimpleNamespace(
+            files=[
+                {"name": "resume.docx", "id": "private-file-id"},
+                {"name": "resume.pdf", "id": "private-file-id"},
+                {"name": "cover_letter.docx", "id": "private-file-id"},
+                {"name": "cover_letter.pdf", "id": "private-file-id"},
+            ]
+        ),
+    )
+
+    summary = application_output_summary([result])
+
+    assert summary == {
+        "application_local_packets": 1,
+        "application_local_files_docx": 2,
+        "application_local_files_pdf": 2,
+        "application_drive_packets": 1,
+        "application_drive_files_docx": 2,
+        "application_drive_files_pdf": 2,
+    }
+    assert "private-file-id" not in str(summary)
 
 
 def test_format_job_scan_summary_hides_details_by_default():
