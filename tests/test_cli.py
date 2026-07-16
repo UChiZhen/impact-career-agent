@@ -158,6 +158,44 @@ def test_scan_linkedin_search_command_uses_safe_live_summary(monkeypatch):
     assert "Mode: live" in output.getvalue()
 
 
+def test_scan_linkedin_search_live_hides_opportunity_details_by_default(monkeypatch):
+    private_opportunity = Opportunity(
+        source="linkedin_search",
+        company="Private Employer",
+        job_title="Private Role",
+        location="Private Location",
+    )
+
+    monkeypatch.setenv("APIFY_API_TOKEN", "test-token")
+    monkeypatch.setattr(
+        "career_agent.cli.main.LinkedInSearchSource",
+        lambda config: SimpleNamespace(fetch=lambda: [private_opportunity]),
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-linkedin-search",
+                "--live",
+                "--weekday",
+                "0",
+                "--query-limit",
+                "1",
+                "--max-results-per-query",
+                "1",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Opportunities: 1" in text
+    assert "Details hidden" in text
+    assert "Private Employer" not in text
+    assert "Private Role" not in text
+    assert "Private Location" not in text
+
+
 def test_load_env_file_keeps_existing_env_value(monkeypatch, tmp_path):
     env_path = tmp_path / ".env"
     env_path.write_text("APIFY_API_TOKEN=file-token\nAPIFY_MAX_RESULTS_PER_QUERY=9\n")

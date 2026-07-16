@@ -282,6 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum queries or opportunities to print.",
     )
     search_parser.add_argument(
+        "--show-details",
+        action="store_true",
+        help="Print live opportunity company, title, and location rows.",
+    )
+    search_parser.add_argument(
         "--query-limit",
         type=int,
         help="Maximum planned queries to execute. Useful for live smoke tests.",
@@ -1029,13 +1034,16 @@ def run_linkedin_search_scan(args: argparse.Namespace) -> str:
         f"Queries: {len(queries)}",
         f"Opportunities: {len(opportunities)}",
     ]
-    if opportunities:
+    if opportunities and args.show_details:
         lines.append("")
         lines.append("Top opportunities")
         for opportunity in opportunities[: args.limit]:
             lines.append(
                 f" - {opportunity.company} | {opportunity.job_title} | {opportunity.location}"
             )
+    elif opportunities:
+        lines.append("")
+        lines.append("Details hidden. Use --show-details to print company/title/location rows.")
     return "\n".join(lines)
 
 

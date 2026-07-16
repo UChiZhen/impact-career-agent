@@ -295,6 +295,12 @@ expects only `GEMINI_API_KEY`, and scores exactly one public RSS signal with
 Sheets, Apify, private profile, or resume settings. Provider stderr is withheld
 from the Actions log, and the workflow does not upload artifacts.
 
+`first-user-apify-smoke.yml` is the next isolated credential boundary. Its
+same-named Environment expects only `APIFY_API_TOKEN`. The workflow runs one
+public sample keyword/location query, requests at most one result, disables
+inter-query delay, prints counts only, withholds provider stderr, and does not
+receive Gemini, Google OAuth, or private user configuration.
+
 Recommended first behavior:
 
 - Add `workflow_dispatch` before adding a schedule.

@@ -1,0 +1,111 @@
+name: first-user-apify-smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: first-user-apify-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apify-search-smoke:
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: first-user-apify-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out the public repository
+        uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Apify runtime dependencies
+        run: python -m pip install -e ".[apify]"
+
+      - name: Confirm unrelated private settings are unavailable
+        run: |
+          forbidden_names=(
+            GEMINI_API_KEY
+            OPENAI_API_KEY
+            GOOGLE_CREDENTIALS_JSON
+            GOOGLE_TOKEN_JSON
+            GOOGLE_SHEET_ID
+            GOOGLE_APPLICATION_TRACKER_SHEET_ID
+            GMAIL_RECIPIENT
+            PRIVATE_CANDIDATE_PROFILE_YAML
+            PRIVATE_MASTER_RESUME_YAML
+            PRIVATE_LINKEDIN_SEARCHES_YAML
+          )
+
+          for name in "${forbidden_names[@]}"; do
+            if [[ -n "${!name-}" ]]; then
+              echo "::error::Unrelated private setting $name must not be available."
+              exit 1
+            fi
+          done
+
+          test ! -e private
+
+      - name: Run one bounded Apify search
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          APIFY_ACTOR_ID: curious_coder~linkedin-jobs-scraper
+          APIFY_ACTOR_TIMEOUT_SECONDS: "30"
+          APIFY_MAX_TOTAL_JOBS: "1"
+          APIFY_INTER_QUERY_DELAY_SECONDS: "0"
+        run: |
+          output_file="${RUNNER_TEMP}/apify-smoke.txt"
+          error_file="${RUNNER_TEMP}/apify-smoke-error.txt"
+
+          if [[ -z "${APIFY_API_TOKEN:-}" ]]; then
+            echo "::error::APIFY_API_TOKEN is not configured in first-user-apify-smoke."
+            exit 1
+          fi
+
+          if ! career-agent scan-linkedin-search \
+            --live \
+            --searches examples/sample_data/linkedin_searches.yaml \
+            --region united_states \
+            --weekday 0 \
+            --query-limit 1 \
+            --max-results-per-query 1 >"${output_file}" 2>"${error_file}"; then
+            echo "::error::Apify smoke failed; raw provider output was withheld."
+            exit 1
+          fi
+
+          unset APIFY_API_TOKEN
+          cat "${output_file}"
+
+          mode=$(awk -F': ' '$1 == "Mode" {print $2}' "${output_file}")
+          queries=$(awk -F': ' '$1 == "Queries" {print $2}' "${output_file}")
+          opportunities=$(awk -F': ' '$1 == "Opportunities" {print $2}' "${output_file}")
+
+          [[ "${mode}" == "live" ]]
+          [[ "${queries}" == "1" ]]
+          [[ "${opportunities}" =~ ^[0-9]+$ ]]
+          [[ "${opportunities}" -le 1 ]]
+          grep -Fq "Details hidden." "${output_file}" || [[ "${opportunities}" == "0" ]]
+
+      - name: Confirm Apify smoke left no private or generated files
+        run: |
+          test ! -e private
+          test ! -e application_packets
+          test -z "$(git status --porcelain --untracked-files=all)"
