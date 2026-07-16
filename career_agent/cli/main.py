@@ -14,7 +14,7 @@ import yaml
 
 from career_agent import __version__
 from career_agent.applications import LocalApplicationPacketSink, generate_application_packet
-from career_agent.core import ApplicationPacket, FitScore, Opportunity
+from career_agent.core import ApplicationPacket, FitScore, Opportunity, Signal
 from career_agent.demo import (
     DEFAULT_CONFIG_PATH,
     load_candidate_profile,
@@ -59,6 +59,7 @@ from career_agent.sources.news import (
     RSSNewsSource,
     RSSNewsSourceConfig,
     check_source_pack_health,
+    career_hypothesis_for_subtype,
     load_news_source_pack,
     parse_impactalpha_newsletter_eml,
 )
@@ -1485,6 +1486,7 @@ def fetch_and_score_signals_for_job_scan(args: argparse.Namespace):
         candidate = load_candidate_profile(Path(args.candidate_profile))
         provider = news_scoring_provider_from_args(args, signals)
         signals = score_signals(signals, provider, candidate=candidate)
+        source_summary[f"signal_scoring_provider_{args.news_score_provider}"] = 1
         source_summary.update(signal_score_summary(signals))
         signals = top_signals(signals, limit=args.top_signals)
 
@@ -1885,7 +1887,7 @@ def build_job_scan_review_payload(*, source_summary, opportunities, signals=None
 
     signal_rows = []
     for signal in signals or []:
-        rationale = signal.career_hypothesis or signal.summary or ""
+        rationale = signal_review_rationale(signal)
         signal_rows.append(
             {
                 "source": signal.source,
@@ -1902,6 +1904,19 @@ def build_job_scan_review_payload(*, source_summary, opportunities, signals=None
         "opportunities": opportunity_rows,
         "capital_signals": signal_rows,
     }
+
+
+def signal_review_rationale(signal: Signal) -> str:
+    """Prefer article-specific insight over deterministic subtype boilerplate."""
+    hypothesis = signal.career_hypothesis or ""
+    default_hypothesis = career_hypothesis_for_subtype(
+        signal.signal_subtype or "macro_tailwind"
+    )
+    if hypothesis and hypothesis != default_hypothesis:
+        return hypothesis
+    if signal.summary:
+        return signal.summary
+    return hypothesis
 
 
 def compact_review_text(value: str, *, limit: int) -> str:

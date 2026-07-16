@@ -15,6 +15,8 @@ Score opportunities for a mission-driven candidate. Be strict: recommend
 apply_now only when the role is a strong fit. Return valid JSON only.
 """
 
+DEFAULT_JOB_SCORING_BATCH_SIZE = 10
+
 
 def build_job_fit_prompt(
     candidate: CandidateProfile,
@@ -114,26 +116,39 @@ def score_opportunities_with_fallback(
     provider: LLMProvider,
     *,
     description_limit: int = 1200,
+    batch_size: int = DEFAULT_JOB_SCORING_BATCH_SIZE,
 ) -> list[Opportunity]:
-    """Score opportunities with an LLM provider, falling back locally on failure."""
-    try:
-        scored = score_opportunities(
-            opportunities,
-            candidate,
-            provider,
-            description_limit=description_limit,
-        )
-        return [
-            opportunity.model_copy(
-                update={"metadata": {**opportunity.metadata, "scoring_source": "llm"}}
+    """Score in bounded batches and locally recover only failed batches."""
+    if batch_size < 1:
+        raise ValueError("batch_size must be at least 1")
+
+    results = []
+    for start in range(0, len(opportunities), batch_size):
+        batch = opportunities[start : start + batch_size]
+        try:
+            scored = score_opportunities(
+                batch,
+                candidate,
+                provider,
+                description_limit=description_limit,
             )
-            for opportunity in scored
-        ]
-    except Exception as exc:
-        return [
-            fallback_score_opportunity(opportunity, candidate, reason=str(exc))
-            for opportunity in opportunities
-        ]
+            results.extend(
+                opportunity.model_copy(
+                    update={
+                        "metadata": {
+                            **opportunity.metadata,
+                            "scoring_source": "llm",
+                        }
+                    }
+                )
+                for opportunity in scored
+            )
+        except Exception as exc:
+            results.extend(
+                fallback_score_opportunity(opportunity, candidate, reason=str(exc))
+                for opportunity in batch
+            )
+    return results
 
 
 def score_opportunity(
@@ -213,7 +228,7 @@ def fallback_score_opportunity(
         total = min(total, 45)
     total = _bounded_int(total, 0, 100)
 
-    top_reasons = ["Fallback local scoring used because provider scoring failed."]
+    top_reasons = ["Deterministic local scoring used for this opportunity."]
     if skill_hits:
         top_reasons.append(f"Keyword overlap: {', '.join(skill_hits[:4])}.")
     if geography_hit:
@@ -238,9 +253,12 @@ def fallback_score_opportunity(
         org_type_match=org_type_match,
         level_match=level_match,
         background_fit=background_fit,
-        match_summary=(
-            f"Local fallback score for {opportunity.job_title} at {opportunity.company}. "
-            "Review before acting because the LLM scorer did not complete."
+        match_summary=_fallback_match_summary(
+            skill_hits=skill_hits,
+            geography_hit=geography_hit,
+            org_type_hit=org_type_hit,
+            level_hit=level_hit,
+            excluded_hit=excluded_hit,
         ),
         top_reasons=top_reasons,
         risks=risks,
@@ -257,6 +275,34 @@ def fallback_score_opportunity(
     if reason:
         metadata["scoring_fallback_reason"] = reason[:240]
     return opportunity.model_copy(update={"fit": fit, "metadata": metadata})
+
+
+def _fallback_match_summary(
+    *,
+    skill_hits: list[str],
+    geography_hit: bool,
+    org_type_hit: bool,
+    level_hit: bool,
+    excluded_hit: bool,
+) -> str:
+    """Describe concrete local-match evidence without repeating provider errors."""
+    evidence = []
+    if skill_hits:
+        evidence.append(f"skills: {', '.join(skill_hits[:3])}")
+    if geography_hit:
+        evidence.append("target geography")
+    if org_type_hit:
+        evidence.append("target organization type")
+    if level_hit:
+        evidence.append("preferred role level")
+
+    if evidence:
+        summary = f"Posting text matches {'; '.join(evidence)}."
+    else:
+        summary = "Limited explicit overlap was found in the available posting text."
+    if excluded_hit:
+        summary += " The title also contains an excluded seniority term."
+    return summary
 
 
 def fit_score_from_dict(item: dict[str, Any]) -> FitScore:

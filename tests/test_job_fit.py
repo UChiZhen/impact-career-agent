@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from career_agent.core import CandidateProfile, Opportunity
+import career_agent.scoring.job_fit as job_fit_module
+from career_agent.core import CandidateProfile, FitScore, Opportunity
 from career_agent.llm import LLMProviderError, MockLLMProvider
 from career_agent.scoring import (
     build_job_fit_prompt,
@@ -131,6 +132,8 @@ def test_fallback_score_opportunity_adds_fit_and_metadata():
     assert scored.fit.recommended_action in {"apply_now", "review", "skip"}
     assert scored.metadata["scoring_source"] == "fallback"
     assert "provider unavailable" in scored.metadata["scoring_fallback_reason"]
+    assert "Review before acting" not in scored.fit.match_summary
+    assert "skills: Python, SQL" in scored.fit.match_summary
 
 
 def test_fallback_seniority_exclusion_only_applies_to_job_title():
@@ -179,3 +182,38 @@ def test_score_opportunities_with_fallback_handles_provider_shape_failure():
     assert scored[0].fit is not None
     assert scored[0].metadata["scoring_source"] == "fallback"
     assert "Expected 1 scored jobs" in scored[0].metadata["scoring_fallback_reason"]
+
+
+def test_score_opportunities_with_fallback_isolates_failed_batch(monkeypatch):
+    opportunities = [
+        demo_opportunity().model_copy(update={"job_title": f"Analyst {index}"})
+        for index in range(3)
+    ]
+    batch_sizes = []
+
+    def fake_score(batch, candidate, provider, *, description_limit):
+        batch_sizes.append(len(batch))
+        if len(batch) == 1:
+            raise LLMProviderError("second batch failed")
+        return [
+            opportunity.model_copy(
+                update={"fit": FitScore(total=84, recommended_action="apply_now")}
+            )
+            for opportunity in batch
+        ]
+
+    monkeypatch.setattr(job_fit_module, "score_opportunities", fake_score)
+
+    scored = score_opportunities_with_fallback(
+        opportunities,
+        demo_candidate(),
+        MockLLMProvider(),
+        batch_size=2,
+    )
+
+    assert batch_sizes == [2, 1]
+    assert [item.metadata["scoring_source"] for item in scored] == [
+        "llm",
+        "llm",
+        "fallback",
+    ]

@@ -11,6 +11,7 @@ from career_agent import __version__
 from career_agent.cli.main import (
     ApplicationDraftResult,
     application_output_summary,
+    build_job_scan_review_payload,
     draft_application_packets_for_scan,
     fetch_linkedin_search_opportunities_for_job_scan,
     format_job_scan_summary,
@@ -751,6 +752,28 @@ def test_scan_jobs_json_output_is_ranked_and_excludes_sensitive_source_content()
     assert "description" not in serialized
     assert "master_resume" not in serialized
     assert "candidate" not in serialized
+
+
+def test_job_scan_review_payload_prefers_signal_summary_over_generic_hypothesis():
+    from career_agent.core import Signal
+    from career_agent.sources.news import career_hypothesis_for_subtype
+
+    signal = Signal(
+        source="Example",
+        title="Policy update",
+        summary="A new tax credit is expected to increase climate-project hiring.",
+        signal_subtype="macro_tailwind",
+        career_hypothesis=career_hypothesis_for_subtype("macro_tailwind"),
+        relevance_score=7,
+    )
+
+    payload = build_job_scan_review_payload(
+        source_summary={},
+        opportunities=[],
+        signals=[signal],
+    )
+
+    assert payload["capital_signals"][0]["rationale"] == signal.summary
 
 
 def test_scan_jobs_json_output_rejects_email_send():
