@@ -1776,11 +1776,17 @@ def format_job_scan_summary(
         lines.append("")
         lines.append("Top opportunities")
         for opportunity in opportunities[:limit]:
-            action = f" | {opportunity.fit.recommended_action}" if opportunity.fit else ""
+            fit = opportunity.fit
+            score = f"{fit.total}/100" if fit else "unscored"
+            action = fit.recommended_action if fit else "unscored"
             lines.append(
                 f" - {opportunity.source}: {opportunity.company} | "
-                f"{opportunity.job_title} | {opportunity.location}{action}"
+                f"{opportunity.job_title} | {opportunity.location} | {score} | {action}"
             )
+            if fit:
+                reason = " ".join(fit.match_summary.split())[:320]
+                if reason:
+                    lines.append(f"   reason: {reason}")
     elif not show_details and opportunities:
         lines.append("")
         lines.append("Details hidden. Use --show-details to print company/title/location rows.")

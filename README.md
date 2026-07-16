@@ -131,7 +131,8 @@ career-agent scan-jobs \
 ```
 
 By default, `scan-jobs` prints counts only. Use `--show-details` when you
-explicitly want company/title/location rows in the terminal.
+explicitly want company/title/location, score, action, and short match-reason
+rows in the terminal.
 
 Use `--dry-run` for live reads and in-memory application previews when no side
 effects are allowed. This boundary rejects email sending, Drive/local packet

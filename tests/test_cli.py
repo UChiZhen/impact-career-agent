@@ -1081,6 +1081,11 @@ def test_format_job_scan_summary_hides_details_by_default():
         company="Private Org",
         job_title="Analyst",
         location="Remote",
+        fit=FitScore(
+            total=88,
+            recommended_action="apply_now",
+            match_summary="Private matching reason.",
+        ),
     )
 
     summary = format_job_scan_summary(
@@ -1091,7 +1096,32 @@ def test_format_job_scan_summary_hides_details_by_default():
     )
 
     assert "Private Org" not in summary
+    assert "Private matching reason" not in summary
     assert "Details hidden" in summary
+
+
+def test_format_job_scan_summary_shows_score_action_and_single_line_reason():
+    opportunity = Opportunity(
+        source="linkedin_email",
+        company="Example Fund",
+        job_title="Investment Analyst",
+        location="Chicago",
+        fit=FitScore(
+            total=88,
+            recommended_action="apply_now",
+            match_summary="Strong investment fit.\nRelevant climate finance experience.",
+        ),
+    )
+
+    summary = format_job_scan_summary(
+        source_summary={"linkedin_email": 1, "deduped_total": 1},
+        opportunities=[opportunity],
+        show_details=True,
+        limit=10,
+    )
+
+    assert "Example Fund | Investment Analyst | Chicago | 88/100 | apply_now" in summary
+    assert "reason: Strong investment fit. Relevant climate finance experience." in summary
 
 
 def test_scan_jobs_can_include_scored_news_signals(monkeypatch):
