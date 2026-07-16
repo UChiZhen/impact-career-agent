@@ -139,6 +139,12 @@ review payload. It includes role metadata, score, action, short reason, and
 application status, while excluding job-description text, candidate data, and
 resume or cover-letter content.
 
+Scheduled personal runners can pass `--rotation-date YYYY-MM-DD` to distribute
+bounded source scans over time. Watchlist batches advance daily, LinkedIn
+keyword-query batches advance weekly within the configured weekday/region
+pool, and both wrap around without producing a short final batch. Re-running
+the same date selects the same inputs.
+
 Use `--dry-run` for live reads and in-memory application previews when no side
 effects are allowed. This boundary rejects email sending, Drive/local packet
 output, tracker write-back, PDF/debug files, replacement, and forced

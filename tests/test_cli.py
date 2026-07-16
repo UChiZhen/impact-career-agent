@@ -1,3 +1,4 @@
+import argparse
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 import json
@@ -9,6 +10,7 @@ import pytest
 from career_agent import __version__
 from career_agent.cli.main import (
     draft_application_packets_for_scan,
+    fetch_linkedin_search_opportunities_for_job_scan,
     format_job_scan_summary,
     format_news_scan_summary,
     linkedin_email_config_from_args,
@@ -16,6 +18,7 @@ from career_agent.cli.main import (
     load_env_file,
     main,
     mock_score_response,
+    parse_rotation_date,
 )
 from career_agent.core import ApplicationPacket, FitScore, Opportunity
 from career_agent.sinks.google_sheets import TrackerPacketState
@@ -535,6 +538,71 @@ def test_scan_jobs_live_command_uses_safe_summary(monkeypatch):
     assert "linkedin_email: 1" in text
     assert "deduped_total: 1" in text
     assert "Example Capital | Analyst | Chicago" in text
+
+
+def test_scan_jobs_reports_linkedin_search_rotation_counts(monkeypatch):
+    monkeypatch.setattr(
+        "career_agent.cli.main.fetch_linkedin_search_opportunities_for_job_scan",
+        lambda args: (
+            [],
+            {
+                "linkedin_search_queries_available": 18,
+                "linkedin_search_queries_selected": 4,
+                "linkedin_search_rotation_offset": 8,
+            },
+        ),
+    )
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--linkedin-search-live",
+                "--rotation-date",
+                "2026-07-16",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "linkedin_search_queries_available: 18" in text
+    assert "linkedin_search_queries_selected: 4" in text
+    assert "linkedin_search_rotation_offset: 8" in text
+
+
+def test_linkedin_search_rotation_date_selects_its_own_weekday_pool(monkeypatch):
+    captured = {}
+
+    class FakeSource:
+        def __init__(self, config):
+            captured["queries"] = config.queries
+
+        def fetch(self):
+            return []
+
+    monkeypatch.setenv("APIFY_API_TOKEN", "test-token")
+    monkeypatch.setattr("career_agent.cli.main.LinkedInSearchSource", FakeSource)
+    args = SimpleNamespace(
+        searches="examples/sample_data/linkedin_searches.yaml",
+        region=None,
+        rotation_date=parse_rotation_date("2026-07-13"),
+        query_limit=2,
+        max_results_per_query=5,
+    )
+
+    opportunities, summary = fetch_linkedin_search_opportunities_for_job_scan(args)
+
+    assert opportunities == []
+    assert summary["linkedin_search_queries_available"] == 4
+    assert summary["linkedin_search_queries_selected"] == 2
+    assert {query.region for query in captured["queries"]} == {"united_states"}
+
+
+def test_parse_rotation_date_rejects_non_iso_dates():
+    assert parse_rotation_date("2026-07-16").isoformat() == "2026-07-16"
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_rotation_date("07/16/2026")
 
 
 def test_scan_jobs_send_email_uses_sender(monkeypatch):

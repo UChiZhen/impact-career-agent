@@ -12,6 +12,7 @@ from career_agent.sources import (
     load_organizations,
     normalize_legacy_source,
     opportunity_from_dict,
+    select_rotating_batch,
 )
 
 
@@ -109,3 +110,26 @@ def test_fetch_all_opportunities_dedupes_across_sources():
 
     assert len(opportunities) == 3
     assert len(duplicated) == 3
+
+
+def test_select_rotating_batch_is_stable_and_wraps_without_shrinking():
+    items = list(range(7))
+
+    first, first_offset = select_rotating_batch(items, limit=3, rotation_index=0)
+    wrapped, wrapped_offset = select_rotating_batch(items, limit=3, rotation_index=2)
+
+    assert first == [0, 1, 2]
+    assert first_offset == 0
+    assert wrapped == [6, 0, 1]
+    assert wrapped_offset == 6
+
+
+def test_rotating_batches_cover_every_item_within_one_cycle():
+    items = list(range(289))
+    batches = [
+        select_rotating_batch(items, limit=20, rotation_index=index)[0]
+        for index in range(15)
+    ]
+
+    assert all(len(batch) == 20 for batch in batches)
+    assert set().union(*map(set, batches)) == set(items)

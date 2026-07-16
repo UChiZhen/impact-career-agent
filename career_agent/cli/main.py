@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import json
 import os
 import tempfile
@@ -37,7 +38,11 @@ from career_agent.sinks.google_sheets import (
     GoogleSheetsApplicationTracker,
     GoogleSheetsTrackerConfig,
 )
-from career_agent.sources import dedupe_opportunities, load_linkedin_search_queries
+from career_agent.sources import (
+    dedupe_opportunities,
+    load_linkedin_search_queries,
+    select_rotating_batch,
+)
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSource, CareerPageSourceConfig
 from career_agent.sources.linkedin_email import LinkedInEmailSource, LinkedInEmailSourceConfig
@@ -470,6 +475,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="Maximum Apify results per query when search live is enabled.",
+    )
+    jobs_parser.add_argument(
+        "--rotation-date",
+        type=parse_rotation_date,
+        help=(
+            "Enable deterministic source rotation for an ISO date (YYYY-MM-DD). "
+            "Watchlists advance daily and LinkedIn query pools advance weekly."
+        ),
     )
     jobs_parser.add_argument(
         "--show-details",
@@ -1306,8 +1319,11 @@ def run_job_scan(args: argparse.Namespace) -> str:
             source_summary["linkedin_email"] = len(email_opportunities)
 
         if args.linkedin_search_live:
-            search_opportunities = fetch_linkedin_search_opportunities_for_job_scan(args)
+            search_opportunities, search_summary = (
+                fetch_linkedin_search_opportunities_for_job_scan(args)
+            )
             opportunities.extend(search_opportunities)
+            source_summary.update(search_summary)
             source_summary["linkedin_search"] = len(search_opportunities)
 
         if args.watchlist_sheet_live:
@@ -1717,11 +1733,21 @@ def fetch_linkedin_email_opportunities_for_job_scan(args: argparse.Namespace):
 
 
 def fetch_linkedin_search_opportunities_for_job_scan(args: argparse.Namespace):
-    queries = load_linkedin_search_queries(Path(args.searches), regions=args.region)
-    queries = queries[: args.query_limit]
-    config = LinkedInSearchSourceConfig.from_env(queries=tuple(queries))
+    rotation_date = getattr(args, "rotation_date", None)
+    queries = load_linkedin_search_queries(
+        Path(args.searches),
+        weekday=rotation_date.weekday() if rotation_date else None,
+        regions=args.region,
+    )
+    rotation_index = rotation_date.toordinal() // 7 if rotation_date else 0
+    selected_queries, rotation_offset = select_rotating_batch(
+        queries,
+        limit=args.query_limit,
+        rotation_index=rotation_index,
+    )
+    config = LinkedInSearchSourceConfig.from_env(queries=tuple(selected_queries))
     config = LinkedInSearchSourceConfig(
-        queries=tuple(queries),
+        queries=tuple(selected_queries),
         actor_id=config.actor_id,
         max_results_per_query=args.max_results_per_query,
         actor_timeout_seconds=config.actor_timeout_seconds,
@@ -1729,7 +1755,12 @@ def fetch_linkedin_search_opportunities_for_job_scan(args: argparse.Namespace):
         inter_query_delay_seconds=config.inter_query_delay_seconds,
         api_token=config.api_token,
     )
-    return LinkedInSearchSource(config).fetch()
+    opportunities = LinkedInSearchSource(config).fetch()
+    return opportunities, {
+        "linkedin_search_queries_available": len(queries),
+        "linkedin_search_queries_selected": len(selected_queries),
+        "linkedin_search_rotation_offset": rotation_offset,
+    }
 
 
 def fetch_watchlist_opportunities_for_job_scan(args: argparse.Namespace):
@@ -1746,7 +1777,13 @@ def fetch_watchlist_opportunities_for_job_scan(args: argparse.Namespace):
         )
     )
     organizations = watchlist.fetch()
-    selected = organizations[: args.watchlist_limit]
+    rotation_date = getattr(args, "rotation_date", None)
+    rotation_index = rotation_date.toordinal() if rotation_date else 0
+    selected, rotation_offset = select_rotating_batch(
+        organizations,
+        limit=args.watchlist_limit,
+        rotation_index=rotation_index,
+    )
     snapshots = CareerPageSource(
         CareerPageSourceConfig(organizations=tuple(selected), timeout_seconds=15)
     ).fetch_pages()
@@ -1759,9 +1796,18 @@ def fetch_watchlist_opportunities_for_job_scan(args: argparse.Namespace):
     page_summary = {
         "watchlist_organizations": len(organizations),
         "watchlist_scanned": len(selected),
+        "watchlist_rotation_offset": rotation_offset,
         "career_pages_success": sum(1 for snapshot in snapshots if snapshot.success),
     }
     return opportunities, page_summary
+
+
+def parse_rotation_date(value: str) -> date:
+    """Parse a reproducible source-rotation date for CLI use."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("rotation date must use YYYY-MM-DD") from exc
 
 
 def format_job_scan_summary(

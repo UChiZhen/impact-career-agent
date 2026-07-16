@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, Sequence, TypeVar
 
 import yaml
 
@@ -23,6 +23,8 @@ LINKEDIN_SEARCH_ROTATION = {
     5: [],
     6: [],
 }
+
+RotatingItem = TypeVar("RotatingItem")
 
 
 class OpportunitySourceProvider(Protocol):
@@ -58,6 +60,26 @@ class LinkedInSearchQuery:
     location: str
     region: str
     category: str
+
+
+def select_rotating_batch(
+    items: Sequence[RotatingItem],
+    *,
+    limit: int,
+    rotation_index: int = 0,
+) -> tuple[list[RotatingItem], int]:
+    """Select a deterministic fixed-size batch and wrap at the list boundary."""
+    if not items or limit <= 0:
+        return [], 0
+    if limit >= len(items):
+        return list(items), 0
+
+    offset = (max(0, rotation_index) * limit) % len(items)
+    end = offset + limit
+    selected = list(items[offset:end])
+    if end > len(items):
+        selected.extend(items[: end - len(items)])
+    return selected, offset
 
 
 def normalize_legacy_source(value: str) -> str:

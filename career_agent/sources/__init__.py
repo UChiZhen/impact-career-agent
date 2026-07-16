@@ -15,6 +15,7 @@ from career_agent.sources.opportunities import (
     load_organizations,
     normalize_legacy_source,
     opportunity_from_dict,
+    select_rotating_batch,
 )
 from career_agent.sources.career_extraction import extract_opportunities_from_snapshot
 from career_agent.sources.career_pages import CareerPageSnapshot, CareerPageSource, CareerPageSourceConfig
@@ -63,6 +64,7 @@ __all__ = [
     "load_organizations",
     "normalize_legacy_source",
     "opportunity_from_dict",
+    "select_rotating_batch",
     "CareerPageSource",
     "CareerPageSnapshot",
     "CareerPageSourceConfig",
