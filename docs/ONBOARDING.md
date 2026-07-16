@@ -309,6 +309,36 @@ client and Gmail readonly scope, reads at most one LinkedIn alert message,
 prints counts only, then deletes the temporary auth directory. It does not send
 email or call Drive or Sheets.
 
+After every isolated credential smoke passes,
+`first-user-integrated-dry-run.yml` exercises the private pipeline behind one
+additional, manually approved Environment. It combines one Gmail alert, one
+Apify query, one watchlist organization, public RSS, one ImpactAlpha email,
+Gemini scoring, and at most one in-memory application packet preview. The CLI
+`--dry-run` boundary rejects email sending, non-preview packet output, tracker
+write-back, PDF/debug output, replacement, and forced regeneration. The
+workflow validates a counts-only output allowlist before publishing the
+summary, withholds raw provider errors, deletes all temporary private files,
+and uploads no artifacts.
+
+This integrated Environment needs its own copies of only these Secrets:
+
+```text
+GEMINI_API_KEY
+APIFY_API_TOKEN
+GOOGLE_CREDENTIALS_JSON
+GOOGLE_TOKEN_JSON
+GOOGLE_SHEET_ID
+PRIVATE_CANDIDATE_PROFILE_YAML
+PRIVATE_MASTER_RESUME_YAML
+PRIVATE_LINKEDIN_SEARCHES_YAML
+```
+
+Copying an existing credential into this Environment is a separate trust
+decision from the isolated smokes. Require explicit user approval before each
+credential group is copied, and keep the Environment restricted to `main` with
+a required reviewer. Do not add recipient, tracker, Drive-output, or OpenAI
+Secrets to this dry-run boundary.
+
 Recommended first behavior:
 
 - Add `workflow_dispatch` before adding a schedule.

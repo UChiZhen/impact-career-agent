@@ -95,7 +95,7 @@ The unified scan can also draft the top application packet without credentials,
 file output, or cloud calls:
 
 ```text
-$ python -m career_agent.cli.main scan-jobs --config examples/demo_config.yaml --draft-applications 1
+$ python -m career_agent.cli.main scan-jobs --config examples/demo_config.yaml --draft-applications 1 --show-details
 Job scan summary
 career_page: 1
 linkedin_email: 1
@@ -132,6 +132,19 @@ career-agent scan-jobs \
 
 By default, `scan-jobs` prints counts only. Use `--show-details` when you
 explicitly want company/title/location rows in the terminal.
+
+Use `--dry-run` for live reads and in-memory application previews when no side
+effects are allowed. This boundary rejects email sending, Drive/local packet
+output, tracker write-back, PDF/debug files, replacement, and forced
+regeneration:
+
+```bash
+career-agent scan-jobs \
+  --dry-run \
+  --score \
+  --draft-applications 1 \
+  --application-output preview
+```
 
 Add `--score` to score all deduplicated opportunities. The default scoring
 provider is a deterministic local mock for safe demos and tests. Use Gemini

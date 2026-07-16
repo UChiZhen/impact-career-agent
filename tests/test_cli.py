@@ -1,7 +1,9 @@
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+
+import pytest
 
 from career_agent import __version__
 from career_agent.cli.main import (
@@ -616,6 +618,52 @@ def test_scan_jobs_can_draft_top_application_packet_preview():
     assert "scoring_source_fallback: 2" in text
 
 
+def test_scan_jobs_dry_run_keeps_application_preview_details_private():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--dry-run",
+                "--score",
+                "--draft-applications",
+                "1",
+            ]
+        )
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "dry_run: 1" in text
+    assert "Application packets: 1" in text
+    assert "Application packet details hidden" in text
+    assert "Example Impact Fund" not in text
+    assert "Impact Investment Analyst" not in text
+    assert "packet:" not in text
+
+
+@pytest.mark.parametrize(
+    "write_args",
+    [
+        ["--send-email"],
+        ["--application-output", "local"],
+        ["--tracker-sheet-id", "private-sheet"],
+        ["--render-pdf"],
+        ["--debug-output"],
+        ["--replace-existing"],
+        ["--force-regenerate"],
+    ],
+)
+def test_scan_jobs_dry_run_rejects_write_capable_options(write_args):
+    stderr = StringIO()
+    with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
+        main(["scan-jobs", "--dry-run", *write_args])
+
+    assert exc_info.value.code == 2
+    assert "--dry-run rejects write-capable options" in stderr.getvalue()
+
+
 def test_scan_jobs_does_not_draft_when_full_jd_is_unavailable(monkeypatch):
     def incomplete_enrichment(opportunity):
         return JobDescriptionEnrichmentResult(
@@ -1010,6 +1058,7 @@ def test_scan_jobs_application_packets_can_use_drive_and_tracker(monkeypatch):
                 "--replace-existing",
                 "--tracker-sheet-id",
                 "sheet-123",
+                "--show-details",
             ]
         )
 

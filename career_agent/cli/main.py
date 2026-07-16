@@ -477,6 +477,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print opportunity company/title/location rows.",
     )
     jobs_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Permit reads and in-memory previews while rejecting every write-capable option.",
+    )
+    jobs_parser.add_argument(
         "--include-unscored",
         action="store_true",
         help="Include unscored opportunities in email digests. Hidden by default.",
@@ -672,6 +677,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "scan-jobs":
+        try:
+            validate_job_scan_dry_run(args)
+        except ValueError as exc:
+            parser.error(str(exc))
         print(run_job_scan(args))
         return 0
 
@@ -1265,6 +1274,8 @@ def run_job_scan(args: argparse.Namespace) -> str:
     if args.env_file:
         load_env_file(Path(args.env_file))
 
+    validate_job_scan_dry_run(args)
+
     opportunities = []
     signals = []
     source_summary: dict[str, int] = {}
@@ -1331,6 +1342,8 @@ def run_job_scan(args: argparse.Namespace) -> str:
         source_summary.update(scoring_source_summary(deduped))
 
     source_summary["deduped_total"] = len(deduped)
+    if args.dry_run:
+        source_summary["dry_run"] = 1
     summary_text = format_job_scan_summary(
         source_summary=source_summary,
         opportunities=deduped,
@@ -1355,8 +1368,38 @@ def run_job_scan(args: argparse.Namespace) -> str:
         )
         summary_text = append_email_send_summary(summary_text, send_result)
     if application_results:
-        summary_text = append_application_packet_summary(summary_text, application_results)
+        summary_text = append_application_packet_summary(
+            summary_text,
+            application_results,
+            show_details=args.show_details,
+        )
     return summary_text
+
+
+def validate_job_scan_dry_run(args: argparse.Namespace) -> None:
+    """Reject write-capable scan options when the explicit dry-run boundary is active."""
+    if not getattr(args, "dry_run", False):
+        return
+
+    conflicts = []
+    if args.send_email:
+        conflicts.append("--send-email")
+    if args.application_output != "preview":
+        conflicts.append(f"--application-output {args.application_output}")
+    if args.tracker_sheet_id:
+        conflicts.append("--tracker-sheet-id")
+    if args.render_pdf:
+        conflicts.append("--render-pdf")
+    if args.debug_output:
+        conflicts.append("--debug-output")
+    if args.replace_existing:
+        conflicts.append("--replace-existing")
+    if args.force_regenerate:
+        conflicts.append("--force-regenerate")
+
+    if conflicts:
+        joined = ", ".join(conflicts)
+        raise ValueError(f"--dry-run rejects write-capable options: {joined}")
 
 
 def fetch_and_score_signals_for_job_scan(args: argparse.Namespace):
@@ -1758,8 +1801,20 @@ def append_email_send_summary(summary_text: str, send_result: dict) -> str:
 def append_application_packet_summary(
     summary_text: str,
     application_results: list[ApplicationDraftResult],
+    *,
+    show_details: bool = False,
 ) -> str:
     """Append generated packet outcomes to a job scan summary."""
+    if not show_details:
+        return "\n".join(
+            [
+                summary_text,
+                "",
+                f"Application packets: {len(application_results)}",
+                "Application packet details hidden. Use --show-details to print packet rows.",
+            ]
+        )
+
     lines = [summary_text, "", "Application packets"]
     for result in application_results:
         packet = result.packet
