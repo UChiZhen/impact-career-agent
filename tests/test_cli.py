@@ -85,6 +85,46 @@ def test_scan_linkedin_email_command_uses_safe_summary(monkeypatch):
     assert "Opportunities: 2" in output.getvalue()
 
 
+def test_scan_linkedin_email_live_hides_opportunity_details_by_default(monkeypatch):
+    private_opportunity = Opportunity(
+        source="linkedin_email",
+        company="Private Employer",
+        job_title="Private Role",
+        location="Private Location",
+    )
+
+    class FakeSource:
+        def __init__(self, config):
+            self.config = config
+
+        def gmail_query(self):
+            return "from:jobalerts-noreply@linkedin.com after:2026/07/15"
+
+        def build_gmail_service(self):
+            return object()
+
+        def list_message_metadata(self, service, query):
+            return [{"id": "message-1"}]
+
+        def fetch_message_metadata_from_service(self, service, messages, query):
+            return [private_opportunity]
+
+    monkeypatch.setattr("career_agent.cli.main.LinkedInEmailSource", FakeSource)
+
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(["scan-linkedin-email", "--live", "--max-results", "1"])
+
+    text = output.getvalue()
+    assert exit_code == 0
+    assert "Messages: 1" in text
+    assert "Opportunities: 1" in text
+    assert "Details hidden" in text
+    assert "Private Employer" not in text
+    assert "Private Role" not in text
+    assert "Private Location" not in text
+
+
 def test_linkedin_email_config_from_args_prefers_cli_over_env(monkeypatch):
     monkeypatch.setenv("LINKEDIN_ALERT_HOURS_BACK", "26")
     monkeypatch.setenv("LINKEDIN_ALERT_MAX_RESULTS", "20")

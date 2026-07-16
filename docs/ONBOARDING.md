@@ -301,6 +301,14 @@ public sample keyword/location query, requests at most one result, disables
 inter-query delay, prints counts only, withholds provider stderr, and does not
 receive Gemini, Google OAuth, or private user configuration.
 
+`first-user-google-smoke.yml` is the first Google OAuth boundary. Its
+same-named Environment expects only `GOOGLE_CREDENTIALS_JSON` and
+`GOOGLE_TOKEN_JSON`. The workflow reconstructs them with owner-only file
+permissions under the runner temporary directory, validates the matching OAuth
+client and Gmail readonly scope, reads at most one LinkedIn alert message,
+prints counts only, then deletes the temporary auth directory. It does not send
+email or call Drive or Sheets.
+
 Recommended first behavior:
 
 - Add `workflow_dispatch` before adding a schedule.

@@ -234,6 +234,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=10,
         help="Maximum parsed opportunities to print.",
     )
+    email_parser.add_argument(
+        "--show-details",
+        action="store_true",
+        help="Print live opportunity company, title, and location rows.",
+    )
 
     search_parser = subparsers.add_parser(
         "scan-linkedin-search",
@@ -986,13 +991,16 @@ def run_linkedin_email_scan(args: argparse.Namespace) -> str:
         f"Messages: {len(messages)}",
         f"Opportunities: {len(opportunities)}",
     ]
-    if opportunities:
+    if opportunities and args.show_details:
         lines.append("")
         lines.append("Top opportunities")
         for opportunity in opportunities[: args.limit]:
             lines.append(
                 f" - {opportunity.company} | {opportunity.job_title} | {opportunity.location}"
             )
+    elif opportunities:
+        lines.append("")
+        lines.append("Details hidden. Use --show-details to print company/title/location rows.")
     return "\n".join(lines)
 
 
