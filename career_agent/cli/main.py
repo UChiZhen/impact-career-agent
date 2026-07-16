@@ -477,6 +477,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print opportunity company/title/location rows.",
     )
     jobs_parser.add_argument(
+        "--output-format",
+        choices=("text", "json"),
+        default="text",
+        help="Return the normal text summary or a private review JSON payload.",
+    )
+    jobs_parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Permit reads and in-memory previews while rejecting every write-capable option.",
@@ -677,6 +683,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "scan-jobs":
+        if args.output_format == "json" and args.send_email:
+            parser.error("--output-format json cannot be combined with --send-email")
         try:
             validate_job_scan_dry_run(args)
         except ValueError as exc:
@@ -1344,13 +1352,23 @@ def run_job_scan(args: argparse.Namespace) -> str:
     source_summary["deduped_total"] = len(deduped)
     if args.dry_run:
         source_summary["dry_run"] = 1
-    summary_text = format_job_scan_summary(
-        source_summary=source_summary,
-        opportunities=deduped,
-        signals=signals,
-        show_details=args.show_details,
-        limit=args.limit,
-    )
+    if args.output_format == "json":
+        summary_text = json.dumps(
+            build_job_scan_review_payload(
+                source_summary=source_summary,
+                opportunities=deduped,
+                signals=signals,
+            ),
+            ensure_ascii=False,
+        )
+    else:
+        summary_text = format_job_scan_summary(
+            source_summary=source_summary,
+            opportunities=deduped,
+            signals=signals,
+            show_details=args.show_details,
+            limit=args.limit,
+        )
     if args.send_email:
         sender = GmailEmailSender(
             config_from_env(
@@ -1367,7 +1385,7 @@ def run_job_scan(args: argparse.Namespace) -> str:
             subject=args.email_subject,
         )
         summary_text = append_email_send_summary(summary_text, send_result)
-    if application_results:
+    if application_results and args.output_format == "text":
         summary_text = append_application_packet_summary(
             summary_text,
             application_results,
@@ -1792,6 +1810,56 @@ def format_job_scan_summary(
         lines.append("Details hidden. Use --show-details to print company/title/location rows.")
 
     return "\n".join(lines)
+
+
+def build_job_scan_review_payload(*, source_summary, opportunities, signals=None) -> dict:
+    """Build a whitelisted private review payload without JD or resume content."""
+    ranked_opportunities = sorted(
+        opportunities,
+        key=lambda opportunity: opportunity.fit.total if opportunity.fit else -1,
+        reverse=True,
+    )
+    opportunity_rows = []
+    for opportunity in ranked_opportunities:
+        fit = opportunity.fit
+        opportunity_rows.append(
+            {
+                "source": opportunity.source,
+                "company": opportunity.company,
+                "job_title": opportunity.job_title,
+                "location": opportunity.location,
+                "job_url": opportunity.job_url,
+                "score": fit.total if fit else None,
+                "action": fit.recommended_action if fit else "unscored",
+                "reason": compact_review_text(fit.match_summary if fit else "", limit=320),
+                "application_status": opportunity.metadata.get("application_status", ""),
+            }
+        )
+
+    signal_rows = []
+    for signal in signals or []:
+        rationale = signal.career_hypothesis or signal.summary or ""
+        signal_rows.append(
+            {
+                "source": signal.source,
+                "title": signal.title,
+                "url": signal.url,
+                "score": signal.relevance_score,
+                "rationale": compact_review_text(rationale, limit=240),
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "summary": dict(source_summary),
+        "opportunities": opportunity_rows,
+        "capital_signals": signal_rows,
+    }
+
+
+def compact_review_text(value: str, *, limit: int) -> str:
+    """Flatten and cap private review prose for concise downstream display."""
+    return " ".join(value.split())[:limit]
 
 
 def append_email_send_summary(summary_text: str, send_result: dict) -> str:

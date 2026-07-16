@@ -134,6 +134,11 @@ By default, `scan-jobs` prints counts only. Use `--show-details` when you
 explicitly want company/title/location, score, action, and short match-reason
 rows in the terminal.
 
+Private runners can request `--output-format json` for a ranked, whitelisted
+review payload. It includes role metadata, score, action, short reason, and
+application status, while excluding job-description text, candidate data, and
+resume or cover-letter content.
+
 Use `--dry-run` for live reads and in-memory application previews when no side
 effects are allowed. This boundary rejects email sending, Drive/local packet
 output, tracker write-back, PDF/debug files, replacement, and forced

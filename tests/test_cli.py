@@ -1,5 +1,6 @@
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -641,6 +642,54 @@ def test_scan_jobs_dry_run_keeps_application_preview_details_private():
     assert "Example Impact Fund" not in text
     assert "Impact Investment Analyst" not in text
     assert "packet:" not in text
+
+
+def test_scan_jobs_json_output_is_ranked_and_excludes_sensitive_source_content():
+    output = StringIO()
+    with redirect_stdout(output):
+        exit_code = main(
+            [
+                "scan-jobs",
+                "--config",
+                "examples/demo_config.yaml",
+                "--dry-run",
+                "--score",
+                "--output-format",
+                "json",
+            ]
+        )
+
+    payload = json.loads(output.getvalue())
+    opportunities = payload["opportunities"]
+    assert exit_code == 0
+    assert payload["schema_version"] == 1
+    assert payload["summary"]["dry_run"] == 1
+    assert len(opportunities) == 3
+    assert opportunities[0]["score"] >= opportunities[1]["score"]
+    assert set(opportunities[0]) == {
+        "source",
+        "company",
+        "job_title",
+        "location",
+        "job_url",
+        "score",
+        "action",
+        "reason",
+        "application_status",
+    }
+    serialized = output.getvalue()
+    assert "description" not in serialized
+    assert "master_resume" not in serialized
+    assert "candidate" not in serialized
+
+
+def test_scan_jobs_json_output_rejects_email_send():
+    stderr = StringIO()
+    with redirect_stderr(stderr), pytest.raises(SystemExit) as exc_info:
+        main(["scan-jobs", "--output-format", "json", "--send-email"])
+
+    assert exc_info.value.code == 2
+    assert "cannot be combined with --send-email" in stderr.getvalue()
 
 
 @pytest.mark.parametrize(
